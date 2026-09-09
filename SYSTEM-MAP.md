@@ -1,11 +1,11 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-10-a.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-10-b.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
   fair-value model, the measured facts and the phase gates.
-- `EXECUTOR-INSTRUCTIONS.md` holds how the Executor works.
+- `BTC-EXECUTOR-INSTRUCTIONS.md` holds how the Executor works.
 - **This map never restates a CANON §1.2 formula.** The CANON is the only statement of it,
   and `research/twap-divergence.py` is the only implementation of it.
 
@@ -16,7 +16,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor
 compares before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-10-a`
+**Revision string:** `2026-09-10-b`
 
 | anchor | value |
 |---|---|
@@ -27,6 +27,11 @@ compares before doing any work; a mismatch is BLOCKED.
 
 Anchors are the first 12 hex characters of the SHA-256 of the named artifact, except `A3`.
 
+**One row below is not yet true on disk.** The Executor contract was uploaded as
+`BTC-EXECUTOR-INSTRUCTIONS .md` — a space before the extension — and both governance files
+were also copied into `research/`. TZ-03 repairs this. Until its pull request is merged,
+verify that row by content hash, not by path, and treat §7 defect 4 as the reason.
+
 ### Fingerprint table
 
 Every report states `wc -l` and `sha256sum` for each row. `frozen` rows must match the hash
@@ -35,7 +40,7 @@ printed here or the run is BLOCKED. `tracked` rows are reported with no expectat
 | path | lines | bytes | state | SHA-256 |
 |---|---|---|---|---|
 | `SYSTEM-MAP.md` | — | — | reported | self-reference; report the value you compute |
-| `EXECUTOR-INSTRUCTIONS.md` | 234 | 11,128 | frozen | `437b45ea196b9f0191f55e560321dd86f65699e386be56273d1a557e2266fb3b` |
+| `BTC-EXECUTOR-INSTRUCTIONS.md` | 234 | 11,128 | frozen | `437b45ea196b9f0191f55e560321dd86f65699e386be56273d1a557e2266fb3b` |
 | `research/twap-divergence.py` | 1,135 | 50,928 | frozen | `6c50893306292c74160c6c93e983d781225ad9a8cdd4fad725d8972deb31d473` |
 | `research/selftest-twap-divergence.py` | 376 | 16,736 | frozen | `ed22e52f6dc52b6f4a81d753e7a3371d12deab8197084dd5fc122c9ee41a094a` |
 | `research/tz02-distribution.py` | 334 | 14,511 | tracked | `f2ecd5c935a0d24f3bd5acff8d4eb282f8786dfbc617edb36de106880e294bc4` |
@@ -58,18 +63,21 @@ entered git history; the pack is under 300 KB and stays that way.
 | `CryptoReports/` | reports, Executor → straight to `main` |
 | `research/` | measurement code, Executor → branch + PR |
 | `engine/` | live engine — **does not exist yet** |
-| root | `SYSTEM-MAP.md`, `EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
+| root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
 **Branches**
 
 | branch | head | state |
 |---|---|---|
-| `main` | `356c29a` | current |
+| `main` | `7301c1c` | head at revision date; the head is not a gate |
 | `tz-02-divergence-distribution` | `a772d19` | contained in `main`; nothing to merge |
 | `tz-01a-twap-divergence-corrected` | `ea9290b` | the commit the dataset tag points at |
 | `tz-01-twap-divergence` | — | superseded, kept for forensics |
 
 **Tag:** `tz-01a-dataset` → `ea9290b92b9fa50c22d0560d5d01dfa392af44df`.
+
+A read-only mirror of this map also sits in the Architect's project files. The repository
+copy is the authority; the mirror is never edited and never quoted as state.
 
 **Files on `main`:** three TZ files (`TZ-01`, `TZ-01a`, `TZ-02`), three reports of the same
 numbers, three `research/` scripts, `.gitignore`.
@@ -200,8 +208,9 @@ journal, any deployment.
 | # | defect | disposition |
 |---|---|---|
 | 1 | `research/tz02-distribution.py` records the collector-hash comparison into a table (`checks["collector_sha_matches"]`) but never asserts it. The run completes on a mismatch. The other three checks are asserted properly. | harmless for TZ-02 — the hash was verified independently — but the guard does not exist. Fix in the next TZ that touches that file; do not edit the committed report. |
-| 2 | The TZ-02 report was amended after commit (`356c29a`, §3 and §6 item 1). Verified to touch no measurement, table or verdict. | closed by rule: `EXECUTOR-INSTRUCTIONS.md` §3.2 and §5.2 make the class impossible. Both versions stay in history. |
-| 3 | The TZ-02 implementation commit `f8a0c37` (1,850 lines) is on `main`, though the TZ routed code to a branch. It reached `main` without a merge and without a verdict. | closed by rule: `EXECUTOR-INSTRUCTIONS.md` §4.1 and the §4.2 self-check. `main` is left as it is; rewriting history would cost more than the defect. |
+| 2 | The TZ-02 report was amended after commit (`356c29a`, §3 and §6 item 1). Verified to touch no measurement, table or verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §3.2 and §5.2 make the class impossible. Both versions stay in history. |
+| 3 | The TZ-02 implementation commit `f8a0c37` (1,850 lines) is on `main`, though the TZ routed code to a branch. It reached `main` without a merge and without a verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §4.1 and the §4.2 self-check. `main` is left as it is; rewriting history would cost more than the defect. |
+| 4 | The Executor contract is committed as `BTC-EXECUTOR-INSTRUCTIONS .md` — a space before the extension, against hard rule 1 — and both governance files are duplicated at `research/EXECUTOR-INSTRUCTIONS .md` and `research/SYSTEM-MAP.md`. Contents are byte-identical to the delivered files; only the names and locations are wrong. | open — TZ-03 renames the contract and deletes both duplicates. Two copies of this map are two sources of truth, which is the one thing it exists to prevent. |
 
 ---
 
