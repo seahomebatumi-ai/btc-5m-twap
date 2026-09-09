@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-10-b.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-10-c.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -16,7 +16,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor
 compares before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-10-b`
+**Revision string:** `2026-09-10-c`
 
 | anchor | value |
 |---|---|
@@ -26,11 +26,6 @@ compares before doing any work; a mismatch is BLOCKED.
 | `A4` — executor contract | `437b45ea196b` |
 
 Anchors are the first 12 hex characters of the SHA-256 of the named artifact, except `A3`.
-
-**One row below is not yet true on disk.** The Executor contract was uploaded as
-`BTC-EXECUTOR-INSTRUCTIONS .md` — a space before the extension — and both governance files
-were also copied into `research/`. TZ-03 repairs this. Until its pull request is merged,
-verify that row by content hash, not by path, and treat §7 defect 4 as the reason.
 
 ### Fingerprint table
 
@@ -69,7 +64,8 @@ entered git history; the pack is under 300 KB and stays that way.
 
 | branch | head | state |
 |---|---|---|
-| `main` | `7301c1c` | head at revision date; the head is not a gate |
+| `main` | — | moves with every report; the head is never a gate |
+| `tz-03-repo-hygiene` | `d9e58e8` | merged by PR #1 — the rename and the two deletions |
 | `tz-02-divergence-distribution` | `a772d19` | contained in `main`; nothing to merge |
 | `tz-01a-twap-divergence-corrected` | `ea9290b` | the commit the dataset tag points at |
 | `tz-01-twap-divergence` | — | superseded, kept for forensics |
@@ -210,7 +206,7 @@ journal, any deployment.
 | 1 | `research/tz02-distribution.py` records the collector-hash comparison into a table (`checks["collector_sha_matches"]`) but never asserts it. The run completes on a mismatch. The other three checks are asserted properly. | harmless for TZ-02 — the hash was verified independently — but the guard does not exist. Fix in the next TZ that touches that file; do not edit the committed report. |
 | 2 | The TZ-02 report was amended after commit (`356c29a`, §3 and §6 item 1). Verified to touch no measurement, table or verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §3.2 and §5.2 make the class impossible. Both versions stay in history. |
 | 3 | The TZ-02 implementation commit `f8a0c37` (1,850 lines) is on `main`, though the TZ routed code to a branch. It reached `main` without a merge and without a verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §4.1 and the §4.2 self-check. `main` is left as it is; rewriting history would cost more than the defect. |
-| 4 | The Executor contract is committed as `BTC-EXECUTOR-INSTRUCTIONS .md` — a space before the extension, against hard rule 1 — and both governance files are duplicated at `research/EXECUTOR-INSTRUCTIONS .md` and `research/SYSTEM-MAP.md`. Contents are byte-identical to the delivered files; only the names and locations are wrong. | open — TZ-03 renames the contract and deletes both duplicates. Two copies of this map are two sources of truth, which is the one thing it exists to prevent. |
+| 4 | The Executor contract carried a space before its extension and both governance files were duplicated inside `research/`. The duplicated map was **not** a copy of the current map — it was revision `2026-09-10-a`, 25 lines adrift. A stale second map is a worse second source of truth than an identical one. | closed by TZ-03, PR #1: the contract renamed with blob identity preserved, both duplicates deleted, `git ls-files \| grep -c " "` now `0`. The deleted blobs stay in history at `76d4d9f`. |
 
 ---
 
