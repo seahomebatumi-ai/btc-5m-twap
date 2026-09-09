@@ -1,0 +1,5 @@
+# TZ-01a section 6: research/out is not committed until the numbers are accepted.
+# The summary Markdown is the exception - it is a deliverable.
+/research/out/**
+!/research/out/twap-divergence-summary.md
+!/research/out/twap-divergence-contamination.md
