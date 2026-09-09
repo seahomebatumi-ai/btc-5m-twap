@@ -980,18 +980,24 @@ Qualifying observations: 169,995. Distinct intervals: 99,625. Intervals with mor
 | size | 76,818,669 bytes (73.3 MiB) |
 | **SHA-256** | `229a944f2d5111c3e68b1fa0630f8e8658356147f9669d18665e575b60f3716b` |
 | tag pushed to `origin` | yes |
-| Release asset uploaded | **no — blocked locally, see §6 item 1** |
+| Release asset uploaded | **yes** |
+| Release | `TZ-01a validated observation set`, published 2026-09-09, not a draft |
+| Release page | https://github.com/seahomebatumi-ai/btc-5m-twap/releases/tag/tz-01a-dataset |
+| **Asset URL** | https://github.com/seahomebatumi-ai/btc-5m-twap/releases/download/tz-01a-dataset/twap-divergence-observations.parquet |
+| asset state | `uploaded`, `application/octet-stream` |
+| digest reported by GitHub | `sha256:229a944f2d5111c3e68b1fa0630f8e8658356147f9669d18665e575b60f3716b` |
 
-**The tag and the hash are published; the asset is not.** The tag
-`tz-01a-dataset` was pushed to `origin` successfully, so the repository credential
-is present and working — branch `tz-02-divergence-distribution` pushed with the
-same credential. What failed is local, not remote: creating a Release and uploading
-an asset requires the GitHub REST API rather than `git`, and the sandbox this
-session runs under refuses any call that reads the token out of the remote URL and
-sends it to `api.github.com`. Two attempts were refused before the report was
-written. The upload script is ready and the file is unmodified on disk; the
-SHA-256 above is of that exact file, so the asset can be verified against this
-report whenever the call is permitted.
+**Published as specified.** The dataset is a Release asset on tag `tz-01a-dataset`
+and is not in git history. The upload was performed manually: the Release API call is
+refused by the sandbox this session runs under, which blocks reading the repository token
+out of the remote URL and sending it to `api.github.com`, so the asset was uploaded outside
+the session. The tag itself was pushed with `git` from inside the session.
+
+The asset was verified after upload against the file that produced every table in this
+report. GitHub reports size 76,818,669 bytes and digest
+`sha256:229a944f2d5111c3e68b1fa0630f8e8658356147f9669d18665e575b60f3716b`; both are
+identical to the local file's, so the published asset and the measured dataset are the same
+bytes.
 
 `research/out/**` remains git-ignored. The Parquet, the 24 partitions and the carry state are
 not in git history; `.gitignore` carries the TZ-01a rule forward unchanged.
@@ -1119,14 +1125,16 @@ summaries to `4fcbf599799288886e2694969be5b9c38a3489c8cbe7c1e7decc64701f7b2bd4`.
 
 ## 6. What could not be implemented as written
 
-1. **The Release asset upload.** §3 requires the Parquet as a GitHub Release asset and
-   §5.3 requires publishing before reporting. The tag `tz-01a-dataset` and the
-   SHA-256 are published as specified. The asset is not: the Release API call was
-   refused twice by the local sandbox, which blocks reading the credential out of
-   the git remote and sending it to `api.github.com`. This is not a missing
-   credential — the same credential pushed this branch and this tag — so §5.3's
-   "resolve that first" has no remote action to take. It is recorded here rather
-   than worked around.
+1. **The Release asset upload could not be performed from inside the session.** §3 is
+   satisfied — the Parquet is a Release asset on tag `tz-01a-dataset`, and §3 above records
+   the verified digest — but the upload itself was manual. Creating a Release and uploading
+   an asset needs the GitHub REST API rather than `git`, and the local sandbox refuses any
+   call that reads the repository token out of the remote URL and sends it to
+   `api.github.com`; three attempts were refused. This was never a missing credential — the
+   same credential pushed this branch and this tag — so it was handed off rather than
+   worked around. §5.3's publish-before-reporting ordering was therefore not met on the
+   first commit of this report: the report was committed with the asset outstanding and
+   this section amended once the upload was confirmed.
 
 2. **`research/twap-divergence.py` was not on `main`.** §6.5 requires asserting its hash, but
    the file lived only on branch `tz-01a-twap-divergence-corrected` at `ea9290b`. It was
