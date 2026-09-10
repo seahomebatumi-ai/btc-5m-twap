@@ -102,8 +102,10 @@ def venue(t0):
     outcome = manifest.resolved_outcome(market)
     if outcome is None or meta.get("priceToBeat") is None:
         return None
+    final = meta.get("finalPrice")
+    # A venue number the venue did not publish stays None. It is never filled with a default.
     return {"price_to_beat": decimal.Decimal(str(meta["priceToBeat"])),
-            "final_price": decimal.Decimal(str(meta.get("finalPrice", "0"))),
+            "final_price": decimal.Decimal(str(final)) if final is not None else None,
             "resolved_up": outcome == "Up"}
 
 
