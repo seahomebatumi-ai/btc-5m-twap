@@ -26,7 +26,7 @@ import manifest
 
 GRACE_S = 3                 # let in-flight frames land before a window's files are closed
 S6_FETCH_OFFSET_S = 5       # the market is live a moment after T0
-S7_DEADLINE_S = 900         # stop polling for the venue's outcome at T0 + 900
+S7_DEADLINE_S = 3600        # stop polling for the venue's outcome at T0 + 3600
 S7_POLL_S = 15
 RECV_TIMEOUT_S = 30         # no frame for this long means the socket is dead
 
@@ -229,7 +229,7 @@ class Recorder:
                 doc = json.loads(body)
                 market = doc[0] if isinstance(doc, list) else doc
                 meta = (market.get("events") or [{}])[0].get("eventMetadata")
-                if market.get("closed") and market.get("outcomePrices") and meta:
+                if manifest.resolved_outcome(market) is not None and meta:
                     with open(os.path.join(path, "resolution.json"), "wb") as fh:
                         fh.write(body)
                     return
@@ -326,9 +326,10 @@ class Recorder:
     async def main(self):
         os.makedirs(config.ROOT, exist_ok=True)
         log("recorder sha=%s root=%s" % (self.sha, config.ROOT))
-        self.record({"kind": "start", "recv_ns": time.time_ns(), "sha": self.sha})
         # TZ-04a section 4: both floors are checked before the first frame is written.
         free, used = disk_free_bytes(), tree_bytes(config.ROOT)
+        self.record({"kind": "start", "recv_ns": time.time_ns(), "sha": self.sha,
+                     "free_bytes": free, "captured_bytes": used})
         log("pre-run floors: free=%d (floor %d) captured=%d (cap %d)"
             % (free, config.FREE_SPACE_FLOOR_BYTES, used, config.SELF_CAP_BYTES))
         if not self.check_floors("start-up"):

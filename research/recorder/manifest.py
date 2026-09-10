@@ -80,8 +80,33 @@ def _runtime(dirpath):
     return out
 
 
+def resolved_outcome(market):
+    """The winning outcome once the venue has settled the market, else None.
+
+    Before settlement `outcomePrices` carries live quotes such as ["0.685", "0.315"], which are
+    truthy and must not be mistaken for a result. A market counts as settled only when it is
+    closed and its prices are exactly one "1" and the rest "0". Both `outcomes` and
+    `outcomePrices` arrive as JSON-encoded strings.
+    """
+    if not isinstance(market, dict) or not market.get("closed"):
+        return None
+    prices, outcomes = market.get("outcomePrices"), market.get("outcomes")
+    try:
+        prices = json.loads(prices) if isinstance(prices, str) else prices
+        outcomes = json.loads(outcomes) if isinstance(outcomes, str) else outcomes
+    except ValueError:
+        return None
+    if not prices or not outcomes or len(prices) != len(outcomes):
+        return None
+    winners = [o for o, p in zip(outcomes, prices) if str(p) in ("1", "1.0")]
+    losers = [o for o, p in zip(outcomes, prices) if str(p) in ("0", "0.0")]
+    if len(winners) != 1 or len(winners) + len(losers) != len(prices):
+        return None
+    return winners[0]
+
+
 def _resolution_present(dirpath):
-    """True when resolution.json holds a closed market carrying the venue's own outcome."""
+    """True when resolution.json holds a settled market carrying the venue's own outcome."""
     path = os.path.join(dirpath, "resolution.json")
     if not os.path.exists(path):
         return False
@@ -91,9 +116,7 @@ def _resolution_present(dirpath):
     except ValueError:
         return False
     market = doc[0] if isinstance(doc, list) else doc
-    if not isinstance(market, dict) or not market.get("closed"):
-        return False
-    return bool(market.get("outcomePrices"))
+    return resolved_outcome(market) is not None
 
 
 def _gamma_present(dirpath):

@@ -106,7 +106,8 @@ def _synthetic_interval(root, t0, disconnect=False, gamma=True, resolution=True)
             json.dump({"conditionId": "0xabc", "slug": config.slug_for(t0)}, fh)
     if resolution:
         with open(os.path.join(path, "resolution.json"), "w") as fh:
-            json.dump({"conditionId": "0xabc", "closed": True, "outcomePrices": ["0", "1"],
+            json.dump({"conditionId": "0xabc", "closed": True, "outcomes": '["Up", "Down"]',
+                       "outcomePrices": '["0", "1"]',
                        "events": [{"eventMetadata": {"priceToBeat": 1.0, "finalPrice": 2.0}}]}, fh)
     with open(os.path.join(path, manifest.RUNTIME_NAME), "w") as fh:
         fh.write(json.dumps({"kind": "recorder", "recv_ns": base, "sha": "deadbeef"},
@@ -153,6 +154,23 @@ def test_complete_definition():
             check("%s makes the interval incomplete" % name, doc["complete"] is False)
 
 
+def test_resolved_outcome():
+    """Live quotes are truthy and look like prices; only a settled market is a result."""
+    live = {"closed": False, "outcomes": '["Up", "Down"]', "outcomePrices": '["0.685", "0.315"]'}
+    check("live quotes on an open market are not a result",
+          manifest.resolved_outcome(live) is None)
+    check("fractional prices on a closed market are not a result",
+          manifest.resolved_outcome(dict(live, closed=True)) is None)
+    up = {"closed": True, "outcomes": '["Up", "Down"]', "outcomePrices": '["1", "0"]'}
+    down = {"closed": True, "outcomes": '["Up", "Down"]', "outcomePrices": '["0", "1"]'}
+    check("a settled Up market reads as Up", manifest.resolved_outcome(up) == "Up")
+    check("a settled Down market reads as Down", manifest.resolved_outcome(down) == "Down")
+    check("two winners is not a result", manifest.resolved_outcome(
+        dict(up, outcomePrices='["1", "1"]')) is None)
+    check("a closed market with no prices is not a result",
+          manifest.resolved_outcome(dict(up, outcomePrices=None)) is None)
+
+
 def test_floors_are_the_tz_values():
     """A floor that drifted from the TZ would silently change the run's stop condition."""
     check("the free-space floor is exactly 2_000_000_000 bytes",
@@ -182,7 +200,7 @@ def test_no_interpolation_anywhere():
 
 if __name__ == "__main__":
     for fn in (test_window_geometry, test_line_format, test_gzip_determinism,
-               test_manifest_determinism, test_complete_definition,
+               test_manifest_determinism, test_complete_definition, test_resolved_outcome,
                test_floors_are_the_tz_values, test_no_interpolation_anywhere):
         print(fn.__name__)
         fn()
