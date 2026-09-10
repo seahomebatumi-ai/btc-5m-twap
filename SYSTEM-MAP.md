@@ -1,28 +1,27 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-10-c.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-10-d.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
   fair-value model, the measured facts and the phase gates.
 - `BTC-EXECUTOR-INSTRUCTIONS.md` holds how the Executor works.
-- **This map never restates a CANON §1.2 formula.** The CANON is the only statement of it,
-  and `research/twap-divergence.py` is the only implementation of it.
+- **This map never restates a CANON §1.2 formula.**
 
 ---
 
 ## 0. Fingerprint gate
 
-Every TZ header states the required revision string and the anchors below. The Executor
-compares before doing any work; a mismatch is BLOCKED.
+Every TZ header states the required revision string and the anchors below. The Executor compares
+before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-10-c`
+**Revision string:** `2026-09-10-d`
 
 | anchor | value |
 |---|---|
 | `A1` — observation set | `229a944f2d51` |
 | `A2` — collector | `6c5089330629` |
-| `A3` — phase | `1-complete / 2-not-started` |
+| `A3` — phase | `0-reopened / 1-reopened / 2-not-started` |
 | `A4` — executor contract | `437b45ea196b` |
 
 Anchors are the first 12 hex characters of the SHA-256 of the named artifact, except `A3`.
@@ -41,9 +40,9 @@ printed here or the run is BLOCKED. `tracked` rows are reported with no expectat
 | `research/tz02-distribution.py` | 334 | 14,511 | tracked | `f2ecd5c935a0d24f3bd5acff8d4eb282f8786dfbc617edb36de106880e294bc4` |
 | `.gitignore` | 5 | 252 | tracked | `9e50e9f1e0e3245f71d6ccffa0e6c9259b784a4017f12ec54a88cc48580d1f0b` |
 
-Hashes are of the file as committed on `main` at revision date, verified by the Architect
-against `origin/main` — not copied from a report. Changing a `frozen` row requires a TZ that
-authorizes it and a new map revision. Line counts are `wc -l`.
+Hashes are of the file as committed on `main` at revision date, verified by the Architect against
+`origin/main` — not copied from a report. Changing a `frozen` row requires a TZ that authorizes
+it and a new map revision.
 
 ---
 
@@ -57,6 +56,7 @@ entered git history; the pack is under 300 KB and stays that way.
 | `CryptoTZ/` | specifications, Architect → Boss upload |
 | `CryptoReports/` | reports, Executor → straight to `main` |
 | `research/` | measurement code, Executor → branch + PR |
+| `research/recorder/` | live capture — **specified in TZ-04, does not exist yet** |
 | `engine/` | live engine — **does not exist yet** |
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
@@ -72,11 +72,11 @@ entered git history; the pack is under 300 KB and stays that way.
 
 **Tag:** `tz-01a-dataset` → `ea9290b92b9fa50c22d0560d5d01dfa392af44df`.
 
-A read-only mirror of this map also sits in the Architect's project files. The repository
-copy is the authority; the mirror is never edited and never quoted as state.
+A read-only mirror of this map also sits in the Architect's project files. The repository copy is
+the authority; the mirror is never edited and never quoted as state.
 
-**Files on `main`:** three TZ files (`TZ-01`, `TZ-01a`, `TZ-02`), three reports of the same
-numbers, three `research/` scripts, `.gitignore`.
+**Files on `main`:** three TZ files (`TZ-01`, `TZ-01a`, `TZ-02`), three reports, three
+`research/` scripts, `.gitignore`.
 
 ---
 
@@ -99,37 +99,44 @@ numbers, three `research/` scripts, `.gitignore`.
 Anyone can fetch and verify it with no token:
 `curl -sL https://github.com/seahomebatumi-ai/btc-5m-twap/releases/download/tz-01a-dataset/twap-divergence-observations.parquet | sha256sum`
 
-**Columns (25).** Keys `interval_open_ts`, `month`, `tau`, `t`. Inputs `K`, `S_t`,
-`naive_move`, `twap_so_far`, `state`. Volatility `sigma_pre`, `sigma_live`,
-`sd_remaining_pre`, `sd_remaining_live`. Prices `p_twap_pre`, `p_naive_pre`, `p_twap_live`,
-`p_naive_live`. Settlement proxies `twap_1s`, `twap_30s`, `twap_60s`, `outcome_1s`,
-`outcome_30s`, `outcome_60s`. Integrity `n_missing_bars`, `prior_filled_bars`.
+**Columns (25).** Keys `interval_open_ts`, `month`, `tau`, `t`. Inputs `K`, `S_t`, `naive_move`,
+`twap_so_far`, `state`. Volatility `sigma_pre`, `sigma_live`, `sd_remaining_pre`,
+`sd_remaining_live`. Prices `p_twap_pre`, `p_naive_pre`, `p_twap_live`, `p_naive_live`.
+Settlement proxies `twap_1s`, `twap_30s`, `twap_60s`, `outcome_1s`, `outcome_30s`, `outcome_60s`.
+Integrity `n_missing_bars`, `prior_filled_bars`.
+
+**The price data and the integrity accounting remain valid.** The `p_twap_*` columns implement
+the superseded `p_interval` model and the `outcome_*` columns are invalid labels — see §2.2.
 
 **The two sigma variants**, both carried through every measurement:
 
-- `sigma_pre` — from the 30 one-minute bars **before** the interval open, converted to a
-  per-second dollar figure. Fixed for the whole interval.
-- `sigma_live` — from a 1-second window: 300 seconds of run-up before the open plus the bars
-  already closed inside the interval. Causal, and it moves as the interval runs.
+- `sigma_pre` — from the 30 one-minute bars **before** the interval open, per-second dollars,
+  fixed for the interval.
+- `sigma_live` — from a 1-second window: 300 seconds of run-up plus the bars already closed
+  inside the interval. Causal, and it moves as the interval runs.
 
-### 2.2 What the outcome labels are, and are not
+### 2.2 The outcome labels are invalid — withdrawn 2026-09-10
 
-All three labels are **exchange-derived proxies** computed from Binance 1-second klines at
-1 / 30 / 60-second sampling. They are not oracle labels. They disagree with each other:
-`outcome_1s` vs `outcome_60s` differ on **8,719 of 210,234 intervals (4.147%)**, and the
-disagreement lands precisely on the marginal cases.
+`outcome_1s`, `outcome_30s` and `outcome_60s` are all **full-interval averages** of Binance
+prices compared against the interval open, at 1 / 30 / 60-second sampling.
 
-Settlement now reads a 60-second Chainlink stream, so **`outcome_60s` is the closest proxy
-and is the label any new work uses.** The published gate results were computed on
-`outcome_1s`; the label-sensitivity table in the TZ-01a report shows the verdicts hold under
-`outcome_60s` (Brier for `p_twap` improves to 0.0732 / 0.0726). No conclusion in this project
-currently depends on the choice — check that this is still true before relying on it.
+**No Polymarket settlement rule has ever had that shape.** Before 2026-08-07 the venue compared a
+single close against a single open. Since 2026-08-07 it compares two readings of a Chainlink
+trailing-TWAP feed — one at the close, one at the open — with a 30-second lookback until
+2026-08-14 and 60 seconds after it.
+
+The three labels are therefore withdrawn, along with every score computed against them. They stay
+in the Parquet file for forensics and are never used again. The 4.147% disagreement between
+`outcome_1s` and `outcome_60s` is a fact about two invalid labels and carries no information.
+
+Correct labels require either the venue's own resolution (TZ-04 S7, forward only) or a
+recomputation of the true rule's shape over the Binance bars (TZ-05, a proxy, and named as one).
 
 ### 2.3 What is not in the data
 
 **No oracle data. No market data.** There is no Chainlink tick, no Polymarket quote, no
-order-book depth, no fill, no fee-paid figure anywhere in this repository. Everything measured
-to date compares two of the Architect's own models against exchange-derived labels.
+order-book depth, no fill and no fee-paid figure anywhere in this repository. Everything measured
+to date compares two of the Architect's own models against labels that match no venue rule.
 
 ---
 
@@ -137,7 +144,7 @@ to date compares two of the Architect's own models against exchange-derived labe
 
 | file | role |
 |---|---|
-| `research/twap-divergence.py` | the collector. Downloads and verifies the monthly archives, walks the 1-second bars, writes one row per checkpoint. **The only implementation of the CANON §1.2 arithmetic**, in `checkpoint_quantities`; it reads no bars itself, so the causal reading and the superseded TZ-01 reading share one implementation and differ only in which bars they are handed. |
+| `research/twap-divergence.py` | the collector. Downloads and verifies the monthly archives, walks the 1-second bars, writes one row per checkpoint. The only implementation of the superseded `p_interval` arithmetic, in `checkpoint_quantities`; it reads no bars itself, so the causal reading and the superseded TZ-01 reading share one implementation and differ only in which bars they are handed. |
 | `research/selftest-twap-divergence.py` | its analytic self-tests |
 | `research/tz02-distribution.py` | aggregation over the observation set. Reads the Parquet columns only; contains no `erf`, `norm`, `sqrt` or sigma arithmetic. |
 
@@ -149,21 +156,17 @@ Outputs go to `research/out/**`, git-ignored except `twap-divergence-summary.md`
 
 ## 4. What is validated, and by what
 
-| claim | established by | verified independently by the Architect |
+| claim | established by | status |
 |---|---|---|
-| the causal reading is genuinely causal | TZ-01a perturbation test: 22,500 comparisons bit-identical, 7,500 negative controls all moved | yes — truncation test withdrawn and not run |
-| the TWAP model beats the endpoint model | Gate B PASS both variants; Brier 0.0781 vs 0.1145 (`sigma_pre`), 0.0785 vs 0.1057 (`sigma_live`) | yes |
-| divergence is abundant at money-relevant size | Gate A2 PASS: **171.492 events/day**, tradeable, `T = 0.05`, `tau` ∈ {60, 90, 120, 180}, de-duplicated per interval; weakest of six readings 73.864/day | yes — re-derived from the published bytes with independent SQL, exact to three decimals |
-| the collector was not modified between TZ-01a and TZ-02 | hash equality | yes — `6c5089…` read from `origin/main` |
-| the sign of `D = p_twap − p_naive` has **no** preferred direction | TZ-02 measurement 1: 49.6% positive / 50.3% negative over 1,051,170 observations, at every `tau`, under both variants | yes |
+| the causal reading is genuinely causal | TZ-01a perturbation test: 22,500 comparisons bit-identical, 7,500 negative controls all moved | **stands.** The methodology is reused unchanged. |
+| the collector was not modified between TZ-01a and TZ-02 | hash equality, `6c5089…` read from `origin/main` | **stands** |
+| the sign of `D = p_interval − p_naive` has no preferred direction | TZ-02 measurement 1: 49.6% / 50.3% over 1,051,170 observations, every `tau`, both variants | **stands, and is now of no consequence** |
+| the TWAP model beats the endpoint model | Gate B, Brier 0.0781 vs 0.1145 | **WITHDRAWN** — scored against §2.2 labels |
+| divergence is abundant at money-relevant size | Gate A2, 171.492 events/day | **WITHDRAWN** — a gap between two models, one of which prices a quantity the venue does not settle on |
+| inversions are the rare tail — 86 and 137 over 730 days | TZ-02 | **WITHDRAWN** as a claim about the market; reproducible as a fact about two models |
 
-The last row **supersedes the first bullet of CANON §1.4**, which predicted that the abundant
-divergence runs `p_twap > p_naive`. The ramp argument does not generalise to the population.
-Replacement text was issued to the Boss on 2026-09-10; until it is pasted into the project
-instructions, the CANON is stale on that one point and this map is correct.
-
-**Inversions remain the rare tail:** 86 (`sigma_pre`) and 137 (`sigma_live`) over 730 days,
-reproduced exactly by the TZ-02 pipeline.
+**Nothing in this repository is currently validated against a Polymarket settlement rule.** The
+first artifact that will be is the TZ-04 V2 count.
 
 ---
 
@@ -171,15 +174,14 @@ reproduced exactly by the TZ-02 pipeline.
 
 | phase | question | state |
 |---|---|---|
-| 0 | do the two models disagree, and is the TWAP model calibrated? | complete — yes, and yes |
-| 1 | at what divergence threshold, and how often? | **complete — Gate A2 PASS, 171.492/day** |
-| 2 | does the **market price** deviate from `p_fair`, and by how much? | **not started — the decision point** |
-| 3 | is the deviation capturable after fees, spread, depth, latency? | not started |
+| 0 | is the settlement rule what the CANON §1.1 says it is? | **reopened — TZ-04, acceptance ≥ 199 of every 200 intervals** |
+| 1 | is the corrected `p_fair` calibrated against true-rule labels? | **reopened — TZ-05, not yet written** |
+| 2 | does the **market price** deviate from `p_fair`, and by how much? | not started — the decision point |
+| 3 | is the deviation capturable after fee, spread, depth, 50 ms taker delay, oracle basis? | not started |
 | 4 | live, minimum size, fixed loss limit | not started |
 
-**This project has a validated pricer and no known edge.** Phases 0 and 1 could only
-disqualify; neither can confirm one. Phase 2 needs executable Polymarket quotes and the oracle
-basis, and neither exists in this repository.
+**This project has a pricer whose settlement variable is now correctly identified but not yet
+validated against it, and no known edge.** Phases 0 and 1 could only ever disqualify.
 
 ---
 
@@ -192,10 +194,13 @@ basis, and neither exists in this repository.
 | stack | Parquet storage, pandas/pyarrow, DuckDB for aggregation |
 | auth | CLI subscription auth; `ANTHROPIC_API_KEY` must not be set |
 | git remote | HTTPS with the repository token embedded in the remote URL |
-| **sandbox limit** | calls that read that token and send it to `api.github.com` are refused. `git` push/pull work. Release creation and asset upload therefore cannot be done from inside the session — hand the upload to the Boss and verify the result by anonymous download. |
+| egress required by TZ-04 | `ws-live-data.polymarket.com`, the CLOB websocket host, `gamma-api.polymarket.com`. No credentials of any kind. |
+| capture path | `/var/lib/btc-recorder/**` — outside the repository by design, so no capture can reach git history |
+| clock | NTP-disciplined; offset is reported, and > 50 ms invalidates latency claims |
+| **sandbox limit** | calls that read the git token and send it to `api.github.com` are refused. `git` push/pull work. Release creation and asset upload cannot be done from inside the session — hand the upload to the Boss and verify by anonymous download. |
 
-Not yet decided by any TZ and therefore not present: systemd units, the Parquet decision
-journal, any deployment.
+Not yet decided by any TZ and therefore not present: systemd units, the Parquet decision journal,
+capture retention policy, any deployment.
 
 ---
 
@@ -203,16 +208,18 @@ journal, any deployment.
 
 | # | defect | disposition |
 |---|---|---|
-| 1 | `research/tz02-distribution.py` records the collector-hash comparison into a table (`checks["collector_sha_matches"]`) but never asserts it. The run completes on a mismatch. The other three checks are asserted properly. | harmless for TZ-02 — the hash was verified independently — but the guard does not exist. Fix in the next TZ that touches that file; do not edit the committed report. |
-| 2 | The TZ-02 report was amended after commit (`356c29a`, §3 and §6 item 1). Verified to touch no measurement, table or verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §3.2 and §5.2 make the class impossible. Both versions stay in history. |
-| 3 | The TZ-02 implementation commit `f8a0c37` (1,850 lines) is on `main`, though the TZ routed code to a branch. It reached `main` without a merge and without a verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §4.1 and the §4.2 self-check. `main` is left as it is; rewriting history would cost more than the defect. |
-| 4 | The Executor contract carried a space before its extension and both governance files were duplicated inside `research/`. The duplicated map was **not** a copy of the current map — it was revision `2026-09-10-a`, 25 lines adrift. A stale second map is a worse second source of truth than an identical one. | closed by TZ-03, PR #1: the contract renamed with blob identity preserved, both duplicates deleted, `git ls-files \| grep -c " "` now `0`. The deleted blobs stay in history at `76d4d9f`. |
+| 1 | `research/tz02-distribution.py` records the collector-hash comparison into `checks["collector_sha_matches"]` but never asserts it. The run completes on a mismatch. | the guard does not exist. Fix in the next TZ that touches that file; do not edit the committed report. |
+| 2 | The TZ-02 report was amended after commit (`356c29a`). Verified to touch no measurement, table or verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §3.2 and §5.2. Both versions stay in history. |
+| 3 | The TZ-02 implementation commit `f8a0c37` (1,850 lines) reached `main` without a merge and without a verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §4.1 and the §4.2 self-check. `main` is left as it is. |
+| 4 | The Executor contract carried a space before its extension and both governance files were duplicated inside `research/`; the duplicated map was revision `2026-09-10-a`, 25 lines adrift. | closed by TZ-03, PR #1: contract renamed with blob identity preserved, both duplicates deleted, `git ls-files \| grep -c " "` now `0`. Deleted blobs stay in history at `76d4d9f`. |
+| 5 | **The settlement mechanic was wrong from inception.** CANON §1.1 stated resolution as an average over the whole interval; the venue compares two readings of a Chainlink trailing-TWAP feed, and before 2026-08-07 compared a single close against a single open. Every label and every calibration score in the repository was built on the wrong rule. | CANON replaced (revision `2026-09-10-b`), labels withdrawn (§2.2), Phases 0 and 1 reopened. Closed by rule: the CANON now requires a venue mechanic to be established by measurement against resolved outcomes, and bars any label built from the Architect's reading of a rule. **The class is closed by TZ-04 V2, not by this entry.** |
 
 ---
 
 ## 8. What does not exist yet
 
-No live engine, no oracle feed, no quote recorder, no order-book data, no Polymarket client
-code, no execution path, no capital at risk. Nothing in this repository can place an order.
+No recorder, no oracle capture, no quote history, no order-book data, no Polymarket client code,
+no execution path, no capital at risk. Nothing in this repository can place an order or read a
+Chainlink feed.
 
 Per the CANON, a component built ahead of its gate is deleted, not deferred.
