@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-10-d.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-10-e.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,7 +15,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-10-d`
+**Revision string:** `2026-09-10-e`
 
 | anchor | value |
 |---|---|
@@ -56,7 +56,7 @@ entered git history; the pack is under 300 KB and stays that way.
 | `CryptoTZ/` | specifications, Architect → Boss upload |
 | `CryptoReports/` | reports, Executor → straight to `main` |
 | `research/` | measurement code, Executor → branch + PR |
-| `research/recorder/` | live capture — **specified in TZ-04, does not exist yet** |
+| `research/recorder/` | live capture — **specified in TZ-04a, does not exist yet** |
 | `engine/` | live engine — **does not exist yet** |
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
@@ -75,8 +75,9 @@ entered git history; the pack is under 300 KB and stays that way.
 A read-only mirror of this map also sits in the Architect's project files. The repository copy is
 the authority; the mirror is never edited and never quoted as state.
 
-**Files on `main`:** three TZ files (`TZ-01`, `TZ-01a`, `TZ-02`), three reports, three
-`research/` scripts, `.gitignore`.
+**Files on `main`:** six TZ files (`TZ-01`, `TZ-01a`, `TZ-02`, `TZ-03`, `TZ-04`, `TZ-04a`),
+five reports, three `research/` scripts, `.gitignore`. The revision `-d` map undercounted this
+line; the count above is read from `origin/main`.
 
 ---
 
@@ -194,7 +195,9 @@ validated against it, and no known edge.** Phases 0 and 1 could only ever disqua
 | stack | Parquet storage, pandas/pyarrow, DuckDB for aggregation |
 | auth | CLI subscription auth; `ANTHROPIC_API_KEY` must not be set |
 | git remote | HTTPS with the repository token embedded in the remote URL |
-| egress required by TZ-04 | `ws-live-data.polymarket.com`, the CLOB websocket host, `gamma-api.polymarket.com`. No credentials of any kind. |
+| egress, **verified 2026-09-10** | DNS resolves and TCP/443 is open to `ws-live-data.polymarket.com`, `gamma-api.polymarket.com`, `clob.polymarket.com`, `ws-subscriptions-clob.polymarket.com`; anonymous `GET /markets?limit=1` on Gamma returned HTTP 200. No credentials of any kind. |
+| **disk, measured 2026-09-10** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes, free `9,620,611,072`. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
+| host is shared | unrelated production services live on the same filesystem — `crypto-auto`, `my_real_estate_bot`, `seahome_webapp.git`, `/var/www`, `/var/log`. The recorder never deletes anything it did not write. |
 | capture path | `/var/lib/btc-recorder/**` — outside the repository by design, so no capture can reach git history |
 | clock | NTP-disciplined; offset is reported, and > 50 ms invalidates latency claims |
 | **sandbox limit** | calls that read the git token and send it to `api.github.com` are refused. `git` push/pull work. Release creation and asset upload cannot be done from inside the session — hand the upload to the Boss and verify by anonymous download. |
@@ -213,6 +216,8 @@ capture retention policy, any deployment.
 | 3 | The TZ-02 implementation commit `f8a0c37` (1,850 lines) reached `main` without a merge and without a verdict. | closed by rule: `BTC-EXECUTOR-INSTRUCTIONS.md` §4.1 and the §4.2 self-check. `main` is left as it is. |
 | 4 | The Executor contract carried a space before its extension and both governance files were duplicated inside `research/`; the duplicated map was revision `2026-09-10-a`, 25 lines adrift. | closed by TZ-03, PR #1: contract renamed with blob identity preserved, both duplicates deleted, `git ls-files \| grep -c " "` now `0`. Deleted blobs stay in history at `76d4d9f`. |
 | 5 | **The settlement mechanic was wrong from inception.** CANON §1.1 stated resolution as an average over the whole interval; the venue compares two readings of a Chainlink trailing-TWAP feed, and before 2026-08-07 compared a single close against a single open. Every label and every calibration score in the repository was built on the wrong rule. | CANON replaced (revision `2026-09-10-b`), labels withdrawn (§2.2), Phases 0 and 1 reopened. Closed by rule: the CANON now requires a venue mechanic to be established by measurement against resolved outcomes, and bars any label built from the Architect's reading of a rule. **The class is closed by TZ-04 V2, not by this entry.** |
+| 6 | **TZ-04 §4 set a 20 GB free-space floor written from assumption.** The capture host has 9,620,611,072 bytes free of 31,612,203,008 on its only writable filesystem, so the stop condition was true before the first frame and the §6 proving run could never begin. The unit was also ambiguous — decimal or binary was never stated. | TZ-04 superseded by TZ-04a; TZ-04 stays committed and unedited. Closed by rule: §6 of this map now carries the host's measured capacity, and every resource floor is stated in exact bytes derived from it. Reported by the Executor, not found in production. |
+| 7 | Two executions of TZ-04 wrote two different reports to `CryptoReports/TZ-04-market-recorder-report.md`. The first survives only in git history at `28e4444`. | closed by rule: a re-execution never reuses a report path. A correction carries a new TZ number and therefore a new report path — `TZ-04a-…-report.md`. Both versions stay in history. |
 
 ---
 
