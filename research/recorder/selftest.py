@@ -16,6 +16,7 @@ import tempfile
 import config
 import manifest
 import recorder
+import analyze
 
 PASSED = 0
 
@@ -171,6 +172,50 @@ def test_resolved_outcome():
           manifest.resolved_outcome(dict(up, outcomePrices=None)) is None)
 
 
+def test_published_precision():
+    """V1 on real values: the S1 report at T0 = 1789034100 against the venue's price to beat."""
+    import decimal
+    scale = decimal.Decimal(10) ** 18
+    venue = decimal.Decimal("77979.98737803145")
+    at_t0 = decimal.Decimal("77979987378031447506944") / scale
+    one_second_early = decimal.Decimal("77980322368025738084352") / scale
+    check("the S1 report at T0 is not Decimal-equal to the published double",
+          at_t0 != venue)
+    check("it is equal at the precision the venue publishes",
+          analyze.published_equal(at_t0, venue))
+    check("the report one second earlier is not equal at any precision",
+          not analyze.published_equal(one_second_early, venue))
+    check("the residual is below one double ulp at this magnitude",
+          abs(at_t0 - venue) < decimal.Decimal(2) ** -36)
+
+
+def test_clock_filter():
+    """Of a burst, the lowest-delay reply wins - the 28 ms far-server reading must not."""
+    burst = [(0.028110, 0.092550), (0.001367, 0.001345), (0.000941, 0.012997)]
+    check("the lowest round trip is kept", recorder.best_sample(burst) == (0.001367, 0.001345))
+
+
+def test_restart_edges():
+    """A restart's outage starts at the last frame on disk, and a torn line breaks nothing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        base = os.path.join(tmp, config.SERIES, "1789034700")
+        os.makedirs(base)
+        with open(os.path.join(base, "twap60.jsonl"), "w") as fh:
+            fh.write('{"recv_ns":100,"mono_ns":1,"raw":"a"}\n')
+            fh.write('{"recv_ns":300,"mono_ns":2,"raw":"b"}\n')
+            fh.write('{"recv_ns":999,"mono_ns":3,"ra')          # torn by a kill mid-write
+        with open(os.path.join(base, "chainlink.jsonl"), "w") as fh:
+            fh.write('{"recv_ns":250,"mono_ns":1,"raw":"c"}\n')
+        check("the last frame on disk is found", recorder.last_frame_ns(tmp) == 300,
+              str(recorder.last_frame_ns(tmp)))
+        check("an empty capture root gives 0",
+              recorder.last_frame_ns(os.path.join(tmp, "none")) == 0)
+        doc = manifest.build(base)
+        check("a torn line is counted, not fatal",
+              doc["streams"]["twap60"]["unparseable_lines"] == 1
+              and doc["streams"]["twap60"]["messages"] == 2)
+
+
 def test_floors_are_the_tz_values():
     """A floor that drifted from the TZ would silently change the run's stop condition."""
     check("the free-space floor is exactly 2_000_000_000 bytes",
@@ -201,6 +246,7 @@ def test_no_interpolation_anywhere():
 if __name__ == "__main__":
     for fn in (test_window_geometry, test_line_format, test_gzip_determinism,
                test_manifest_determinism, test_complete_definition, test_resolved_outcome,
+               test_published_precision, test_clock_filter, test_restart_edges,
                test_floors_are_the_tz_values, test_no_interpolation_anywhere):
         print(fn.__name__)
         fn()

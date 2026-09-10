@@ -58,7 +58,10 @@ def reports(t0, stream):
             line = line.strip()
             if not line:
                 continue
-            frame = json.loads(json.loads(line)["raw"], parse_float=decimal.Decimal)
+            try:
+                frame = json.loads(json.loads(line)["raw"], parse_float=decimal.Decimal)
+            except (ValueError, KeyError):
+                continue                    # a torn line is counted by the manifest, not read
             if frame.get("type") != "update":
                 continue
             payload = frame.get("payload") or {}
@@ -71,6 +74,19 @@ def reports(t0, stream):
             out.append((int(ts), value))
     out.sort(key=lambda r: r[0])
     return out
+
+
+def published_equal(candidate, venue_value):
+    """Equality at the precision the venue publishes.
+
+    The venue serialises its price to beat as an IEEE-754 double - about 17 significant
+    digits - while the oracle feed carries a 23-digit integer scaled by 1e18. Decimal equality
+    between the two can never hold even when they are the same number: on 2026-09-10 the S1
+    report at T0 = 1789034100 differed from the published price to beat by 2.49e-12, below one
+    double ulp at that magnitude. The full available precision is therefore the double, and
+    that is where exactness is judged. Strict Decimal equality is reported alongside.
+    """
+    return float(candidate) == float(venue_value)
 
 
 def last_at_or_before(rows, ts_ms):
@@ -136,6 +152,7 @@ CANDIDATES = [("S1", config.S1_STREAM, "last<=T0"), ("S1", config.S1_STREAM, "fi
 def v1(run):
     names = ["%s %s" % (s, k) for s, _f, k in CANDIDATES]
     matches = {n: 0 for n in names}
+    strict = {n: 0 for n in names}
     diffs = {n: [] for n in names}
     scored = 0
     for t0 in run:
@@ -149,13 +166,17 @@ def v1(run):
                      else first_at_or_after(rows, t0 * MS))
             if value is None:
                 continue
-            if value == info["price_to_beat"]:
+            if published_equal(value, info["price_to_beat"]):
                 matches[name] += 1
+            if value == info["price_to_beat"]:
+                strict[name] += 1
             diffs[name].append(abs(value - info["price_to_beat"]))
     best = sorted(names, key=lambda n: -matches[n])[:2]
     return {
         "n": scored,
         "matches": matches,
+        "match_definition": "equal as the IEEE-754 double the venue publishes",
+        "strict_decimal_matches": strict,
         "match_rate": {n: (matches[n] / scored if scored else None) for n in names},
         "best_two": best,
         "abs_difference_distribution": {
@@ -186,7 +207,7 @@ def v2(run):
     """
     agree = {"R1": 0, "R2": 0, "R3": 0}
     undecidable = {"R1": 0, "R2": 0, "R3": 0}
-    scored = 0
+    scored, ties = 0, 0
     for t0 in run:
         info = venue(t0)
         if info is None:
@@ -197,7 +218,12 @@ def v2(run):
         close_ms = (t0 + config.INTERVAL_S) * MS
 
         r1_val = first_at_or_after(s1, close_ms)
-        preds = {"R1": (r1_val >= info["price_to_beat"]) if r1_val is not None else None}
+        # R1 compares an S1 report with the venue's price to beat, so it is judged at the
+        # precision the venue publishes, exactly as V1 is.
+        preds = {"R1": (float(r1_val) >= float(info["price_to_beat"]))
+                 if r1_val is not None else None}
+        if r1_val is not None and published_equal(r1_val, info["price_to_beat"]):
+            ties += 1
 
         s3_open = last_at_or_before(s3, t0 * MS)
         window = [v for ts, v in s3 if t0 * MS <= ts <= close_ms]
@@ -215,6 +241,7 @@ def v2(run):
                 agree[rule] += 1
     rates = {r: (agree[r] / scored if scored else None) for r in agree}
     return {"n": scored, "agreements": agree, "undecidable": undecidable,
+            "r1_exact_ties_with_price_to_beat": ties,
             "agreement_rate": rates,
             "acceptance": "at least 199 of every 200 = %.3f" % float(ACCEPTANCE),
             "clears_acceptance": {r: (rates[r] is not None and rates[r] >= float(ACCEPTANCE))

@@ -42,20 +42,24 @@ def _stream_stats(dirpath, stream):
     actually occupies. V7 wants both, so both are measured here rather than estimated.
     """
     path = _stream_path(dirpath, stream)
-    recv, raw_bytes = [], 0
+    recv, raw_bytes, torn = [], 0, 0
     if os.path.exists(path):
         opener = gzip.open if path.endswith(".gz") else open
         with opener(path, "rt", encoding="utf-8") as fh:
             for line in fh:
                 raw_bytes += len(line.encode("utf-8"))
                 line = line.strip()
-                if line:
+                if not line:
+                    continue
+                try:
                     recv.append(json.loads(line)["recv_ns"])
+                except (ValueError, KeyError):
+                    torn += 1           # a line cut short by a process dying mid-write
     stored = os.path.getsize(path) if os.path.exists(path) else 0
     if not recv:
         return {"messages": 0, "first_recv_ns": None, "last_recv_ns": None,
                 "max_inter_message_gap_ms": None, "raw_bytes": raw_bytes,
-                "stored_bytes": stored}
+                "stored_bytes": stored, "unparseable_lines": torn}
     ordered = sorted(recv)
     gaps = [b - a for a, b in zip(ordered, ordered[1:])]
     return {
@@ -65,6 +69,7 @@ def _stream_stats(dirpath, stream):
         "max_inter_message_gap_ms": (max(gaps) / 1e6) if gaps else None,
         "raw_bytes": raw_bytes,
         "stored_bytes": stored,
+        "unparseable_lines": torn,
     }
 
 
@@ -105,7 +110,7 @@ def resolved_outcome(market):
     return winners[0]
 
 
-def _resolution_present(dirpath):
+def resolution_present(dirpath):
     """True when resolution.json holds a settled market carrying the venue's own outcome."""
     path = os.path.join(dirpath, "resolution.json")
     if not os.path.exists(path):
@@ -142,6 +147,7 @@ def build(dirpath):
     runtime = _runtime(dirpath)
     disconnects = sorted(
         ({"start_recv_ns": r["start_recv_ns"], "end_recv_ns": r["end_recv_ns"],
+          "detected_recv_ns": r.get("detected_recv_ns"),
           "reason": r.get("reason", "")} for r in runtime if r.get("kind") == "disconnect"),
         key=lambda r: (r["start_recv_ns"], r["end_recv_ns"]),
     )
@@ -153,7 +159,7 @@ def build(dirpath):
     shas = sorted({r["sha"] for r in runtime if r.get("kind") == "recorder"})
 
     gamma_ok = _gamma_present(dirpath)
-    resolution_ok = _resolution_present(dirpath)
+    resolution_ok = resolution_present(dirpath)
 
     # TZ-04a section 4: `complete` is zero disconnects on S1 and S3 across the whole window,
     # with S6 and S7 both present. S1-S4 share one socket, so any disconnect touches both.
