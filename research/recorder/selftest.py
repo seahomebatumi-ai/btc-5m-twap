@@ -317,7 +317,8 @@ if __name__ == "__main__":
     for fn in (test_window_geometry, test_line_format, test_gzip_determinism,
                test_manifest_determinism, test_complete_definition, test_resolved_outcome,
                test_published_precision, test_clock_filter, test_restart_edges,
-               test_floors_are_the_tz_values, test_no_interpolation_anywhere):
+               test_floors_are_the_tz_values, test_scoring_set, test_rules_at_live_scale,
+               test_no_interpolation_anywhere):
         print(fn.__name__)
         fn()
     print("\n%d of %d checks passed" % (PASSED, PASSED))
