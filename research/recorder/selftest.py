@@ -230,6 +230,76 @@ def test_floors_are_the_tz_values():
               and " " not in filters and filters == filters.lower(), filters)
 
 
+def _doc(t0, disconnect=0, gamma=True, resolution=True):
+    return {"T0_epoch": t0, "complete": not disconnect and gamma and resolution,
+            "disconnect_count": disconnect, "gamma_present": gamma,
+            "resolution_present": resolution, "recorder_git_sha": analyze.RECORDER_SHA}
+
+
+def test_scoring_set():
+    """TZ-04b section 6: members are counted, not run; every non-member in between is a row."""
+    start = analyze.first_scoring_t0(1789035669)
+    check("the 10:21:09 start gives the 10:25 interval first", start == 1789035900, str(start))
+    check("the logged 10:21:10.18 start gives the same interval",
+          analyze.first_scoring_t0(1789035670.180046788) == 1789035900)
+    check("a window opening at the start instant does not lie after it",
+          analyze.first_scoring_t0(1789035810) == 1789036200)
+    check("a window opening just after the start does",
+          analyze.first_scoring_t0(1789035809.999) == 1789035900)
+
+    t = [start + i * 300 for i in range(10)]
+    manifests = {t[0]: _doc(t[0]), t[1]: _doc(t[1], disconnect=1), t[2]: _doc(t[2]),
+                 t[3]: _doc(t[3], resolution=False), t[4]: _doc(t[4]),
+                 t[6]: _doc(t[6]), t[7]: _doc(t[7], gamma=False), t[8]: _doc(t[8]),
+                 t[9]: _doc(t[9])}                       # t[5] has no directory at all
+    rows, full = analyze.scoring_set(manifests, start, need=4)
+    check("the set fills from non-consecutive members", full and len(rows) == 7,
+          "full=%s rows=%d" % (full, len(rows)))
+    check("members are indexed in order",
+          [r["member"] for r in rows] == [1, None, 2, None, 3, None, 4],
+          str([r["member"] for r in rows]))
+    check("each non-member carries its reason",
+          [r["reasons"] for r in rows] == [[], ["disconnect"], [], ["no S7"], [],
+                                           ["no manifest"], []], str([r["reasons"] for r in rows]))
+    check("the walk stops at the last member", rows[-1]["T0"] == t[6])
+    rows, full = analyze.scoring_set(manifests, start, need=20)
+    check("a short capture is reported as not full, through its last interval",
+          not full and rows[-1]["T0"] == t[9] and len(rows) == 10)
+    try:
+        analyze.reasons_for(dict(_doc(t[0]), disconnect_count=1))
+        consistent = False
+    except AssertionError:
+        consistent = True
+    check("a manifest whose verdict contradicts its fields aborts the run", consistent)
+    check("199 of 200 clears the gate", analyze.clears(199, 200))
+    check("198 of 200 does not", not analyze.clears(198, 200))
+    check("no intervals clears nothing", not analyze.clears(0, 0))
+
+
+def test_rules_at_live_scale():
+    """R1, R2, R3 and the V1 candidates on reports at BTC magnitude, with R2 and R3 split."""
+    import decimal
+    D = decimal.Decimal
+    t0 = 1789035900
+    ms = t0 * 1000
+    s3 = [(ms - 1000, D("77900.10")), (ms, D("77900.20")), (ms + 150000, D("77950.00")),
+          (ms + 300000, D("77899.90")), (ms + 301000, D("78000.00"))]
+    s1 = [(ms + 299000, D("77910.00")), (ms + 300000, D("77890.50")), (ms + 301000, D("77999"))]
+    preds, r1_val = analyze.rules(s1, s3, t0, D("77900.20"))
+    check("R1 reads the first S1 report at or after T0 + 300", r1_val == D("77890.50"))
+    check("R1 is Down when that report is below the price to beat", preds["R1"] is False)
+    # mean over [T0, T0+300] = (77900.20 + 77950.00 + 77899.90) / 3 = 77916.70 >= 77900.20
+    check("R2 averages only reports inside [T0, T0 + 300] and reads Up", preds["R2"] is True)
+    check("R3 compares the reading in force at T0 + 300 with the one at T0", preds["R3"] is False)
+    streams = {config.S1_STREAM: s1, "twap30": [], config.S3_STREAM: s3}
+    values = analyze.candidate_values(streams, t0)
+    check("both S3 candidates take the report stamped exactly T0",
+          values[4] == D("77900.20") and values[5] == D("77900.20"), str(values))
+    check("a stream with no report yields no candidate", values[2] is None and values[3] is None)
+    preds, _ = analyze.rules([], s3, t0, D("77900.20"))
+    check("no S1 report after the close leaves R1 undecided, not guessed", preds["R1"] is None)
+
+
 def test_no_interpolation_anywhere():
     """Gaps are recorded, never filled. Prove no fill primitive is reachable in the recorder."""
     banned = ["interpolate", "ffill", "fillna", "forward_fill", "carry_forward", "pad("]
