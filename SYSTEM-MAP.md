@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-10-e.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-11-a.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,7 +15,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-10-e`
+**Revision string:** `2026-09-11-a`
 
 | anchor | value |
 |---|---|
@@ -56,7 +56,7 @@ entered git history; the pack is under 300 KB and stays that way.
 | `CryptoTZ/` | specifications, Architect → Boss upload |
 | `CryptoReports/` | reports, Executor → straight to `main` |
 | `research/` | measurement code, Executor → branch + PR |
-| `research/recorder/` | live capture — **specified in TZ-04a, does not exist yet** |
+| `research/recorder/` | live capture — **exists on branch `tz-04a-market-recorder` at `3895356`, not on `main`.** Six files. Carried forward by TZ-04b. |
 | `engine/` | live engine — **does not exist yet** |
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
@@ -65,6 +65,7 @@ entered git history; the pack is under 300 KB and stays that way.
 | branch | head | state |
 |---|---|---|
 | `main` | — | moves with every report; the head is never a gate |
+| `tz-04a-market-recorder` | `3895356` | the recorder implementation. PR #2 open and **to be closed unmerged**, superseded by TZ-04b, which branches from this commit. |
 | `tz-03-repo-hygiene` | `d9e58e8` | merged by PR #1 — the rename and the two deletions |
 | `tz-02-divergence-distribution` | `a772d19` | contained in `main`; nothing to merge |
 | `tz-01a-twap-divergence-corrected` | `ea9290b` | the commit the dataset tag points at |
@@ -75,9 +76,9 @@ entered git history; the pack is under 300 KB and stays that way.
 A read-only mirror of this map also sits in the Architect's project files. The repository copy is
 the authority; the mirror is never edited and never quoted as state.
 
-**Files on `main`:** six TZ files (`TZ-01`, `TZ-01a`, `TZ-02`, `TZ-03`, `TZ-04`, `TZ-04a`),
-five reports, three `research/` scripts, `.gitignore`. The revision `-d` map undercounted this
-line; the count above is read from `origin/main`.
+**Files on `main`:** seven TZ files (`TZ-01`, `TZ-01a`, `TZ-02`, `TZ-03`, `TZ-04`, `TZ-04a`,
+`TZ-04b`), six reports, three `research/` scripts, `.gitignore`. Nothing under `research/recorder/`
+is on `main`.
 
 ---
 
@@ -133,7 +134,19 @@ in the Parquet file for forensics and are never used again. The 4.147% disagreem
 Correct labels require either the venue's own resolution (TZ-04 S7, forward only) or a
 recomputation of the true rule's shape over the Binance bars (TZ-05, a proxy, and named as one).
 
-### 2.3 What is not in the data
+### 2.3 Live capture — running, unread
+
+Tier A of the recorder has been capturing since **2026-09-10 10:21:09 UTC** on commit `3895356`,
+into `/var/lib/btc-recorder/**` on the VPS — outside the repository, never in git history. Streams:
+the Chainlink 60-second and 30-second TWAP feeds, the non-TWAP Chainlink feed, the Binance
+cross-check feed, market metadata and venue resolutions. The Tier B order-book probe ran once, for
+60 minutes, and retained exactly one interval.
+
+**Nothing in it has been read, scored or aggregated.** It becomes evidence only through the TZ-04b
+scoring set. The venue closes every RTDS socket at 7,200 s, so roughly one interval in sixteen
+fails the `complete` test; the failures are recorded, never filled.
+
+### 2.4 What is not in the data
 
 **No oracle data. No market data.** There is no Chainlink tick, no Polymarket quote, no
 order-book depth, no fill and no fee-paid figure anywhere in this repository. Everything measured
@@ -175,7 +188,7 @@ first artifact that will be is the TZ-04 V2 count.
 
 | phase | question | state |
 |---|---|---|
-| 0 | is the settlement rule what the CANON §1.1 says it is? | **reopened — TZ-04, acceptance ≥ 199 of every 200 intervals** |
+| 0 | is the settlement rule what the CANON §1.1 says it is? | **reopened — TZ-04b, acceptance ≥ 199 of every 200 intervals** |
 | 1 | is the corrected `p_fair` calibrated against true-rule labels? | **reopened — TZ-05, not yet written** |
 | 2 | does the **market price** deviate from `p_fair`, and by how much? | not started — the decision point |
 | 3 | is the deviation capturable after fee, spread, depth, 50 ms taker delay, oracle basis? | not started |
@@ -199,6 +212,7 @@ validated against it, and no known edge.** Phases 0 and 1 could only ever disqua
 | **disk, measured 2026-09-10** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes, free `9,620,611,072`. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
 | host is shared | unrelated production services live on the same filesystem — `crypto-auto`, `my_real_estate_bot`, `seahome_webapp.git`, `/var/www`, `/var/log`. The recorder never deletes anything it did not write. |
 | capture path | `/var/lib/btc-recorder/**` — outside the repository by design, so no capture can reach git history |
+| **RTDS session limit, measured 2026-09-10** | the server closes every websocket `7,200` s after it opens, `1001 Going away`, timer restarting on each new connection. Undocumented. **No TZ may require an unbroken socket for longer than this.** |
 | clock | NTP-disciplined; offset is reported, and > 50 ms invalidates latency claims |
 | **sandbox limit** | calls that read the git token and send it to `api.github.com` are refused. `git` push/pull work. Release creation and asset upload cannot be done from inside the session — hand the upload to the Boss and verify by anonymous download. |
 
@@ -218,13 +232,15 @@ capture retention policy, any deployment.
 | 5 | **The settlement mechanic was wrong from inception.** CANON §1.1 stated resolution as an average over the whole interval; the venue compares two readings of a Chainlink trailing-TWAP feed, and before 2026-08-07 compared a single close against a single open. Every label and every calibration score in the repository was built on the wrong rule. | CANON replaced (revision `2026-09-10-b`), labels withdrawn (§2.2), Phases 0 and 1 reopened. Closed by rule: the CANON now requires a venue mechanic to be established by measurement against resolved outcomes, and bars any label built from the Architect's reading of a rule. **The class is closed by TZ-04 V2, not by this entry.** |
 | 6 | **TZ-04 §4 set a 20 GB free-space floor written from assumption.** The capture host has 9,620,611,072 bytes free of 31,612,203,008 on its only writable filesystem, so the stop condition was true before the first frame and the §6 proving run could never begin. The unit was also ambiguous — decimal or binary was never stated. | TZ-04 superseded by TZ-04a; TZ-04 stays committed and unedited. Closed by rule: §6 of this map now carries the host's measured capacity, and every resource floor is stated in exact bytes derived from it. Reported by the Executor, not found in production. |
 | 7 | Two executions of TZ-04 wrote two different reports to `CryptoReports/TZ-04-market-recorder-report.md`. The first survives only in git history at `28e4444`. | closed by rule: a re-execution never reuses a report path. A correction carries a new TZ number and therefore a new report path — `TZ-04a-…-report.md`. Both versions stay in history. |
+| 8 | **TZ-04a §6 required a scoring set of 200 *consecutive* complete intervals**, across a socket the venue closes every 7,200 s. The ceiling is 23, so the set could never form. | TZ-04a superseded by TZ-04b: `consecutive` deleted, the set redefined as the first 200 qualifying members, the 199-of-200 gate carried across word for word before any score existed. Closed by rule: a requirement is a count of qualifying units, never an unbroken run across a third-party boundary. |
 
 ---
 
 ## 8. What does not exist yet
 
-No recorder, no oracle capture, no quote history, no order-book data, no Polymarket client code,
-no execution path, no capital at risk. Nothing in this repository can place an order or read a
-Chainlink feed.
+No order-book history, no Polymarket client code, no execution path, no capital at risk. Nothing in
+this repository can place an order. The recorder reads; it cannot write to any venue.
 
-Per the CANON, a component built ahead of its gate is deleted, not deferred.
+The recorder itself now exists — on a branch, and running on the host. It is not on `main`, it has
+not been merged, and its output has produced no conclusion. Per the CANON, a component built ahead
+of its gate is deleted, not deferred.
