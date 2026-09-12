@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-tests for the TZ-04a recorder and the TZ-05a Tier C and clock repairs.
+"""Self-tests for the TZ-04a recorder, the TZ-05a Tier C and clock repairs, and TZ-06 R-c.
 
 Every check here is an assert that aborts the run. Nothing is recorded into a summary and
 called a check. Run:  python3 selftest.py
@@ -502,6 +502,63 @@ def test_sntp_rejections_are_counted():
               doc["clock_offset_abs_max_ms"] == 1.25, str(doc["clock_offset_abs_max_ms"]))
 
 
+def _runtime_file(path, records):
+    with open(path, "w", encoding="utf-8") as fh:
+        for rec in records:
+            fh.write(json.dumps(rec, sort_keys=True) + "\n")
+
+
+def test_span_is_bounded_not_denied():
+    """TZ-06 R-c: the analysed span ends at the next start; it is not asserted to have none."""
+    ours = {"kind": "start", "recv_ns": 1789035670180046788, "sha": analyze.RECORDER_SHA}
+    earlier = {"kind": "start", "recv_ns": 1789033991738343639, "sha": "b2" + "1" * 38}
+    later = {"kind": "start", "recv_ns": 1789206785264516934, "sha": "42" * 20}
+    real = analyze.RUNTIME_PATH
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            analyze.RUNTIME_PATH = os.path.join(tmp, "runtime.jsonl")
+            _runtime_file(analyze.RUNTIME_PATH, [earlier, ours])
+            check("with no later start the span is unbounded",
+                  analyze.recorder_start()["next_start_recv_ns"] is None)
+
+            _runtime_file(analyze.RUNTIME_PATH, [earlier, ours, later])
+            start = analyze.recorder_start()
+            check("a restart after ours no longer aborts the analysis",
+                  start["recv_ns"] == ours["recv_ns"], str(start["recv_ns"]))
+            check("the span ends at the first start after ours",
+                  start["next_start_recv_ns"] == later["recv_ns"],
+                  str(start["next_start_recv_ns"]))
+
+            third = dict(later, recv_ns=later["recv_ns"] + 10 ** 9)
+            _runtime_file(analyze.RUNTIME_PATH, [earlier, ours, third, later])
+            check("a third start does not move the bound, whatever the file order",
+                  analyze.recorder_start()["next_start_recv_ns"] == later["recv_ns"])
+
+            _runtime_file(analyze.RUNTIME_PATH,
+                          [ours, dict(ours, recv_ns=ours["recv_ns"] + 1)])
+            try:
+                analyze.recorder_start()
+                one_only = False
+            except AssertionError:
+                one_only = True
+            check("two starts on the analysed commit still abort the run", one_only)
+    finally:
+        analyze.RUNTIME_PATH = real
+
+    bound = later["recv_ns"]
+    check("the last TZ-04b member closes long before the TZ-05a restart",
+          analyze.within_span(1789100100, bound))
+    edge = bound // 10 ** 9 - config.POST_S
+    check("a window closing exactly at the next start is inside the span",
+          analyze.within_span(edge, (edge + config.POST_S) * 10 ** 9))
+    check("a window closing one nanosecond after it is not",
+          not analyze.within_span(edge, (edge + config.POST_S) * 10 ** 9 - 1))
+    check("an interval opening after the next start is not in the span",
+          not analyze.within_span(edge + config.INTERVAL_S, bound))
+    check("an unbounded span contains every interval",
+          analyze.within_span(edge + 10 ** 6, None))
+
+
 if __name__ == "__main__":
     for fn in (test_window_geometry, test_line_format, test_gzip_determinism,
                test_manifest_determinism, test_complete_definition, test_resolved_outcome,
@@ -509,7 +566,7 @@ if __name__ == "__main__":
                test_floors_are_the_tz_values, test_scoring_set, test_rules_at_live_scale,
                test_tier_c_checkpoints, test_tier_c_line_and_manifest,
                test_tier_c_manifest_determinism, test_sntp_reply_validation,
-               test_sntp_rejections_are_counted,
+               test_sntp_rejections_are_counted, test_span_is_bounded_not_denied,
                test_no_interpolation_anywhere):
         print(fn.__name__)
         fn()
