@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-11-a.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-11-b.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,13 +15,13 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-11-a`
+**Revision string:** `2026-09-11-b`
 
 | anchor | value |
 |---|---|
 | `A1` — observation set | `229a944f2d51` |
 | `A2` — collector | `6c5089330629` |
-| `A3` — phase | `0-reopened / 1-reopened / 2-not-started` |
+| `A3` — phase | `0-complete / 1-open / 2-not-started` |
 | `A4` — executor contract | `437b45ea196b` |
 
 Anchors are the first 12 hex characters of the SHA-256 of the named artifact, except `A3`.
@@ -56,7 +56,7 @@ entered git history; the pack is under 300 KB and stays that way.
 | `CryptoTZ/` | specifications, Architect → Boss upload |
 | `CryptoReports/` | reports, Executor → straight to `main` |
 | `research/` | measurement code, Executor → branch + PR |
-| `research/recorder/` | live capture — **exists on branch `tz-04a-market-recorder` at `3895356`, not on `main`.** Six files. Carried forward by TZ-04b. |
+| `research/recorder/` | live capture and its analyzer — six files, on `main` since PR #3 |
 | `engine/` | live engine — **does not exist yet** |
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
@@ -65,7 +65,7 @@ entered git history; the pack is under 300 KB and stays that way.
 | branch | head | state |
 |---|---|---|
 | `main` | — | moves with every report; the head is never a gate |
-| `tz-04a-market-recorder` | `3895356` | the recorder implementation. PR #2 open and **to be closed unmerged**, superseded by TZ-04b, which branches from this commit. |
+| `tz-04b-market-recorder` | `ee2f632` | the recorder and its analyzer. Merged by PR #3 after the TZ-04b verdict. `tz-04a-market-recorder` was closed unmerged and deleted. |
 | `tz-03-repo-hygiene` | `d9e58e8` | merged by PR #1 — the rename and the two deletions |
 | `tz-02-divergence-distribution` | `a772d19` | contained in `main`; nothing to merge |
 | `tz-01a-twap-divergence-corrected` | `ea9290b` | the commit the dataset tag points at |
@@ -76,9 +76,8 @@ entered git history; the pack is under 300 KB and stays that way.
 A read-only mirror of this map also sits in the Architect's project files. The repository copy is
 the authority; the mirror is never edited and never quoted as state.
 
-**Files on `main`:** seven TZ files (`TZ-01`, `TZ-01a`, `TZ-02`, `TZ-03`, `TZ-04`, `TZ-04a`,
-`TZ-04b`), six reports, three `research/` scripts, `.gitignore`. Nothing under `research/recorder/`
-is on `main`.
+**Files on `main`:** eight TZ files (`TZ-01` … `TZ-04b`, `TZ-05`), seven reports, three
+`research/` scripts, six `research/recorder/` files, `.gitignore`.
 
 ---
 
@@ -142,9 +141,16 @@ the Chainlink 60-second and 30-second TWAP feeds, the non-TWAP Chainlink feed, t
 cross-check feed, market metadata and venue resolutions. The Tier B order-book probe ran once, for
 60 minutes, and retained exactly one interval.
 
-**Nothing in it has been read, scored or aggregated.** It becomes evidence only through the TZ-04b
-scoring set. The venue closes every RTDS socket at 7,200 s, so roughly one interval in sixteen
-fails the `complete` test; the failures are recorded, never filled.
+**Read once, by TZ-04b.** The first 215 intervals from the start record — T0 `1789035900` to
+`1789100100` — were disclosed in order; 200 were `complete`, carried a venue resolution, and formed
+the Phase 0 scoring set. All 15 non-members failed on `disconnect`. Eleven disconnects touched the
+span: seven venue closes at ~7,200 s, two 30-second receive timeouts, two connection losses with no
+close frame. Nothing else in the capture has been read, scored or aggregated.
+
+**Measured footprint, TZ-04b V7.** Tier A costs `76,643` bytes per interval on disk, `22,073,069`
+per day. The Tier B order book, captured continuously, would cost `1,913,827,421` bytes per day
+compressed and `19,764,344,212` raw — which is why it is not. Venue resolution reaches the recorder
+a median of `318` s after interval close; the venue's own `closedTime` is a median of `55` s.
 
 ### 2.4 What is not in the data
 
@@ -172,6 +178,9 @@ Outputs go to `research/out/**`, git-ignored except `twap-divergence-summary.md`
 
 | claim | established by | status |
 |---|---|---|
+| the venue settles on a trailing-TWAP comparison — the 60-second feed at the close against the same feed at the open | TZ-04b V2: R1 agrees with the venue's resolved outcome on **200 of 200**, against a 199-of-200 gate fixed before any data was seen | **stands.** The first artifact here validated against a Polymarket settlement rule. |
+| the interval-average reading is wrong, and so is the pre-August snapshot reading | TZ-04b V2: R2 175 of 200, R3 181 of 200 | **stands.** Wrong on one interval in eight and one in ten — not near-misses. |
+| the price to beat equals the settlement feed's reading at the open | TZ-04b V1: 198 of 200 as a double against the venue's published `priceToBeat`; median residual 3.6e-12 USD, worst 3.65 USD | **stands, with a ~1% failure rate every later result carries.** V1 is `unresolved` as the TZ worded it — no pre-settlement field carries the number. |
 | the causal reading is genuinely causal | TZ-01a perturbation test: 22,500 comparisons bit-identical, 7,500 negative controls all moved | **stands.** The methodology is reused unchanged. |
 | the collector was not modified between TZ-01a and TZ-02 | hash equality, `6c5089…` read from `origin/main` | **stands** |
 | the sign of `D = p_interval − p_naive` has no preferred direction | TZ-02 measurement 1: 49.6% / 50.3% over 1,051,170 observations, every `tau`, both variants | **stands, and is now of no consequence** |
@@ -188,8 +197,8 @@ first artifact that will be is the TZ-04 V2 count.
 
 | phase | question | state |
 |---|---|---|
-| 0 | is the settlement rule what the CANON §1.1 says it is? | **reopened — TZ-04b, acceptance ≥ 199 of every 200 intervals** |
-| 1 | is the corrected `p_fair` calibrated against true-rule labels? | **reopened — TZ-05, not yet written** |
+| 0 | is the settlement rule what the CANON §1.1 says it is? | **CLOSED 2026-09-11 — yes. TZ-04b: 200 of 200 against a 199-of-200 gate** |
+| 1 | is the corrected `p_fair` calibrated against true-rule labels? | **open — TZ-06, not yet written** |
 | 2 | does the **market price** deviate from `p_fair`, and by how much? | not started — the decision point |
 | 3 | is the deviation capturable after fee, spread, depth, 50 ms taker delay, oracle basis? | not started |
 | 4 | live, minimum size, fixed loss limit | not started |
@@ -209,7 +218,11 @@ validated against it, and no known edge.** Phases 0 and 1 could only ever disqua
 | auth | CLI subscription auth; `ANTHROPIC_API_KEY` must not be set |
 | git remote | HTTPS with the repository token embedded in the remote URL |
 | egress, **verified 2026-09-10** | DNS resolves and TCP/443 is open to `ws-live-data.polymarket.com`, `gamma-api.polymarket.com`, `clob.polymarket.com`, `ws-subscriptions-clob.polymarket.com`; anonymous `GET /markets?limit=1` on Gamma returned HTTP 200. No credentials of any kind. |
-| **disk, measured 2026-09-10** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes, free `9,620,611,072`. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
+| **disk, measured 2026-09-11 17:45 UTC** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes, free `8,489,132,032`. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
+| **capture cost, measured** | Tier A `22,073,069` bytes/day. Full order book `1,913,827,421` bytes/day compressed — 4.4 days of headroom, so it is never captured continuously on this host. |
+| **price to beat** | published by Gamma only after settlement, at `events[0].eventMetadata.priceToBeat`. Not available before the close; a live pricer reconstructs it from the feed. |
+| **resolution endpoint** | `GET https://gamma-api.polymarket.com/markets/slug/btc-updown-5m-{T0}`, polled from `T0+333` every 15 s |
+| **CLOB websocket** | `wss://ws-subscriptions-clob.polymarket.com/ws/market` |
 | host is shared | unrelated production services live on the same filesystem — `crypto-auto`, `my_real_estate_bot`, `seahome_webapp.git`, `/var/www`, `/var/log`. The recorder never deletes anything it did not write. |
 | capture path | `/var/lib/btc-recorder/**` — outside the repository by design, so no capture can reach git history |
 | **RTDS session limit, measured 2026-09-10** | the server closes every websocket `7,200` s after it opens, `1001 Going away`, timer restarting on each new connection. Undocumented. **No TZ may require an unbroken socket for longer than this.** |
@@ -233,6 +246,8 @@ capture retention policy, any deployment.
 | 6 | **TZ-04 §4 set a 20 GB free-space floor written from assumption.** The capture host has 9,620,611,072 bytes free of 31,612,203,008 on its only writable filesystem, so the stop condition was true before the first frame and the §6 proving run could never begin. The unit was also ambiguous — decimal or binary was never stated. | TZ-04 superseded by TZ-04a; TZ-04 stays committed and unedited. Closed by rule: §6 of this map now carries the host's measured capacity, and every resource floor is stated in exact bytes derived from it. Reported by the Executor, not found in production. |
 | 7 | Two executions of TZ-04 wrote two different reports to `CryptoReports/TZ-04-market-recorder-report.md`. The first survives only in git history at `28e4444`. | closed by rule: a re-execution never reuses a report path. A correction carries a new TZ number and therefore a new report path — `TZ-04a-…-report.md`. Both versions stay in history. |
 | 8 | **TZ-04a §6 required a scoring set of 200 *consecutive* complete intervals**, across a socket the venue closes every 7,200 s. The ceiling is 23, so the set could never form. | TZ-04a superseded by TZ-04b: `consecutive` deleted, the set redefined as the first 200 qualifying members, the 199-of-200 gate carried across word for word before any score existed. Closed by rule: a requirement is a count of qualifying units, never an unbroken run across a third-party boundary. |
+| 9 | **The V4 read-only proof is a bad instrument.** It returns 5 matching lines: two are the regex itself, held in the analyzer that runs the grep, and three are docstring sentences that *deny* the capability. It cannot reach zero however read-only the code is. | open. The substantive claim is carried instead by the merge-base diff and by the absence of any CLOB auth path. TZ-05 W5 replaces the instrument: the file holding the pattern is excluded and the match is on code tokens, not prose. The committed TZ-04b report is not edited. |
+| 10 | **The recorder's SNTP client accepts an invalid reply.** Three `pool.ntp.org` replies carried NTP-era-origin transmit timestamps; with no stratum, leap-indicator or zero-timestamp check they dominated the offset statistics and spuriously flagged 6 intervals over 50 ms. | open, and it does not touch V1/V2, which read venue payload timestamps rather than the local clock. The host's own server shows a maximum absolute offset of `7.872` ms. Fixed by TZ-05 before any latency claim is possible. |
 
 ---
 
@@ -241,6 +256,5 @@ capture retention policy, any deployment.
 No order-book history, no Polymarket client code, no execution path, no capital at risk. Nothing in
 this repository can place an order. The recorder reads; it cannot write to any venue.
 
-The recorder itself now exists — on a branch, and running on the host. It is not on `main`, it has
-not been merged, and its output has produced no conclusion. Per the CANON, a component built ahead
-of its gate is deleted, not deferred.
+The recorder exists, is merged, and is running. Its oracle tier has produced exactly one
+conclusion — the Phase 0 answer — and nothing else in it has been read.
