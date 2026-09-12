@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-11-b.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-11-c.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,7 +15,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-11-b`
+**Revision string:** `2026-09-11-c`
 
 | anchor | value |
 |---|---|
@@ -76,7 +76,7 @@ entered git history; the pack is under 300 KB and stays that way.
 A read-only mirror of this map also sits in the Architect's project files. The repository copy is
 the authority; the mirror is never edited and never quoted as state.
 
-**Files on `main`:** eight TZ files (`TZ-01` … `TZ-04b`, `TZ-05`), seven reports, three
+**Files on `main`:** nine TZ files (`TZ-01` … `TZ-05`, `TZ-05a`), eight reports, three
 `research/` scripts, six `research/recorder/` files, `.gitignore`.
 
 ---
@@ -212,7 +212,8 @@ validated against it, and no known edge.** Phases 0 and 1 could only ever disqua
 
 | item | value |
 |---|---|
-| host | Vultr VPS (Warsaw); the Executor runs Claude Code CLI on the VPS itself |
+| host | Vultr VPS (Warsaw); the Executor runs Claude Code CLI **on the VPS itself**. A cloud Claude Code session is not this host and cannot execute anything that touches the capture. |
+| **host identity, for TZ host gates** | `/var/lib/btc-recorder/` exists and holds interval directories · the recorder process is running · the filesystem holding it is `/dev/vda2`, total `31,612,203,008` bytes. All three, or it is not the capture host. |
 | language | Python 3.12 |
 | stack | Parquet storage, pandas/pyarrow, DuckDB for aggregation |
 | auth | CLI subscription auth; `ANTHROPIC_API_KEY` must not be set |
@@ -248,6 +249,7 @@ capture retention policy, any deployment.
 | 8 | **TZ-04a §6 required a scoring set of 200 *consecutive* complete intervals**, across a socket the venue closes every 7,200 s. The ceiling is 23, so the set could never form. | TZ-04a superseded by TZ-04b: `consecutive` deleted, the set redefined as the first 200 qualifying members, the 199-of-200 gate carried across word for word before any score existed. Closed by rule: a requirement is a count of qualifying units, never an unbroken run across a third-party boundary. |
 | 9 | **The V4 read-only proof is a bad instrument.** It returns 5 matching lines: two are the regex itself, held in the analyzer that runs the grep, and three are docstring sentences that *deny* the capability. It cannot reach zero however read-only the code is. | open. The substantive claim is carried instead by the merge-base diff and by the absence of any CLOB auth path. TZ-05 W5 replaces the instrument: the file holding the pattern is excluded and the match is on code tokens, not prose. The committed TZ-04b report is not edited. |
 | 10 | **The recorder's SNTP client accepts an invalid reply.** Three `pool.ntp.org` replies carried NTP-era-origin transmit timestamps; with no stratum, leap-indicator or zero-timestamp check they dominated the offset statistics and spuriously flagged 6 intervals over 50 ms. | open, and it does not touch V1/V2, which read venue payload timestamps rather than the local clock. The host's own server shows a maximum absolute offset of `7.872` ms. Fixed by TZ-05 before any latency claim is possible. |
+| 11 | **TZ-05 could not be executed in one session on any host.** It restarted the capture process and then scored 200 intervals captured after that restart — 60,000 s of waiting inside one session. It was also triggered in a cloud Claude Code container, which is not the capture host. | TZ-05 superseded by TZ-05a, which deploys only; TZ-05 and its BLOCKED report stay committed. Closed by rule: CANON hard rule 11 splits deployment from measurement, and every TZ touching the capture now carries a host gate derived from §6. |
 
 ---
 
