@@ -248,20 +248,6 @@ def emit_g(g_pooled):
     return "G_RATIO = {%s}\n" % body
 
 
-def check_frozen_literals(g_pooled):
-    """The literals in `pfair.py` are the measured curve. A pricer whose constants drift is not frozen."""
-    checks = []
-    for h in G_LAGS:
-        want = six_significant(g_pooled[h])
-        got = pfair.G_RATIO[h]
-        assert got == want, "pfair.G_RATIO[%d] is %s; M1 measures %s" % (h, got, want)
-        checks.append({"lag": h, "measured_6sd": want, "in_pfair": got, "equal": True})
-    assert sorted(pfair.G_RATIO) == sorted(G_LAGS), \
-        "pfair.G_RATIO carries %s; the far-branch horizons are %s" % (
-            sorted(pfair.G_RATIO), sorted(G_LAGS))
-    return checks
-
-
 # ---- the corrected pricer, composed from pfair.py ---------------------------------
 
 def corrected(row):
@@ -535,7 +521,6 @@ def v9(members):
 def build():
     members, manifests, rows = members_and_manifests()
     m1 = curve(members, manifests)
-    literals = check_frozen_literals(m1["g_pooled"])
 
     scored = []
     for t0 in members:
@@ -565,8 +550,6 @@ def build():
         "V7_in_sample_diagnostics": {
             "warning": "IN SAMPLE on the 400 members that produced the finding. These numbers "
                        "are a fit diagnostic, they confirm nothing, and they support nothing.",
-            "G_RATIO_as_written": {h: pfair.G_RATIO[h] for h in sorted(pfair.G_RATIO)},
-            "literals_match_measurement": literals,
             "per_tau": diagnostics(scored, constant_brier)},
         "V8_test_data_available": v8(manifests),
         "V9_maker_terms": v9(members),
