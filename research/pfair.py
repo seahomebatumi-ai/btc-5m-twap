@@ -96,6 +96,48 @@ def p_fair(state, sd):
     return phi(float(state / sd))
 
 
+# ---- TZ-07a section 4: the measured variance-time correction ---------------------
+
+# TZ-07a M1, measured over the 400 TZ-06 members: the oracle feed's variance does not grow
+# linearly in the lag it is read at. `sigma` is estimated on one-second increments of a
+# smoothed, aggregated feed, and one-second increments understate the diffusion; extrapolating
+# them by `sqrt` out to 260 seconds understates it further, and by more the further it goes.
+# `G_RATIO[h]` is `sigma_h^2 / sigma_1^2` at lag `h`, pooled over every overlapping increment
+# of every member, to six significant digits.
+#
+# These are **literals, not a fit performed at run time**. A pricer that re-derives its
+# constants from whatever data it is pointed at cannot be tested out of sample, and TZ-08
+# scores this file as it stands here. Changing a value is a new TZ and a new map revision.
+#
+# The keys are the far branch's variance horizons `tau - 40` at the five gated taus at or
+# above 60: `tau` 240 / 180 / 120 / 90 / 60.
+G_RATIO = {200: D("2.18300"), 140: D("2.13471"), 80: D("2.06184"), 50: D("1.94691"),
+           20: D("1.95609")}
+
+
+def corrected_sd(tau, sigma):
+    """TZ-07a section 4's `sd`: the same model, with `sigma` read at the scale it is used at.
+
+        tau >= 60:   sd = sigma * sqrt((tau - 40) * G_RATIO[tau - 40])
+        tau <  60:   sd = sigma * sqrt(tau**3 / 10800)
+
+    The CANON section 1.2 formula is not modified and neither is `sigma`: `realised_sigma`
+    over the causal window `[T0 - 300, T0 + t]` is the input here exactly as it is to
+    `state_and_sd`. Only the horizon the one-second reading is carried to changes.
+
+    Below `tau = 60` `G` is exactly 1, fixed by TZ-07a section 4 and not after the fact: the
+    near branch's horizon is 2.5 s at `tau = 30` and 0.09 s at `tau = 10`, at or below the
+    feed's own 1 Hz cadence, where no ratio is measurable. The near branch is therefore
+    returned unchanged, and `selftest-pfair.py` asserts that it is the same value bit for bit.
+    """
+    if tau < SETTLEMENT_S:
+        return sigma * (D(tau) ** 3 / D(TAU_CUBED_DIVISOR)).sqrt()
+    horizon = tau - 40
+    assert horizon in G_RATIO, \
+        "tau = %s needs G_RATIO[%s]; TZ-07a measured %s" % (tau, horizon, sorted(G_RATIO))
+    return sigma * (D(horizon) * G_RATIO[horizon]).sqrt()
+
+
 # ---- the quantities the model is fed --------------------------------------------
 
 def merged_stream(t0, name):

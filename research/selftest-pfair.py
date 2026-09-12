@@ -11,6 +11,10 @@ on their own. The `machinery_*` tests cover the section 3 readers this file's V5
 on - the step-function mean, the one-second grid and the realised-volatility estimator - and
 are counted separately, so neither count is inflated by the other.
 
+The `tz07a_*` families are TZ-07a section 7 V5: the corrected `sd`, the frozen `G_RATIO`
+literals behind it, and the requirement that below `tau = 60` the correction changes nothing
+at all. They are counted separately again, so TZ-06's 56 and 18 stay the numbers they were.
+
 Run:  python3 -B selftest-pfair.py
 """
 
@@ -23,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pfair                                                               # noqa: E402
 from pfair import D                                                        # noqa: E402
 
-COUNTS = {"V5": 0, "machinery": 0}
+COUNTS = {"V5": 0, "machinery": 0, "TZ-07a": 0}
 GROUP = "V5"
 
 # Live scale, from the capture: BTC near 100,000 USD and a per-second realised volatility of a
@@ -123,6 +127,102 @@ def v5_p_fair_moves_the_right_way():
           pfair.near_branch(1, S_T, K, SIGMA, M_R)[1] < D("0.1"))
 
 
+# ---- TZ-07a section 4: the corrected sd ------------------------------------------
+
+# The five expectations below are written out to twenty decimals from `G_RATIO` and `SIGMA`
+# by hand, so that they fail if the literals in `pfair.py` are ever edited without a TZ. They
+# are at live scale - `sigma` a few dollars per second and `K` near 100,000 - never at zero.
+CORRECTED_SD_AT_LIVE_SCALE = {
+    240: D("67.90867028590679156474"),
+    180: D("56.18453890973921661841"),
+    120: D("41.74032582527357320437"),
+     90: D("32.06574252609784802767"),
+     60: D("20.32791215299790693190"),
+}
+
+# `1e-18` on a quantity near 20 to 70 dollars is a relative tolerance below 1e-19, forty
+# digits inside the 60-digit context. It is the width of the hand-written literal, not a
+# tolerance on the arithmetic, which is exact.
+SD_LITERAL_TOLERANCE = D("1e-18")
+
+
+def tz07a_the_near_branch_is_untouched():
+    """"`G` is fixed at exactly 1 below `tau = 60`" - the corrected sd is the uncorrected one."""
+    for tau in (59, 30, 10, 1):
+        want = pfair.near_branch(tau, S_T, K, SIGMA, M_R)[1]
+        got = pfair.corrected_sd(tau, SIGMA)
+        check("tau=%d: the corrected sd equals the uncorrected sd exactly" % tau, got == want,
+              "%s != %s" % (got, want))
+        check("tau=%d: and equals what state_and_sd selects" % tau,
+              got == pfair.state_and_sd(tau, S_T, K, SIGMA, M_R)[1])
+        check("tau=%d: the correction leaves p_fair alone below 60" % tau,
+              pfair.p_fair(pfair.near_branch(tau, S_T, K, SIGMA, M_R)[0], got)
+              == pfair.p_fair(*pfair.near_branch(tau, S_T, K, SIGMA, M_R)))
+    check("no horizon below the settlement boundary carries a ratio",
+          all(h >= 20 for h in pfair.G_RATIO), str(sorted(pfair.G_RATIO)))
+
+
+def tz07a_the_correction_at_the_boundary():
+    """"At `tau = 60` the corrected `sd` is `sigma * sqrt(20 * G_RATIO[20])`.\""""
+    got = pfair.corrected_sd(60, SIGMA)
+    check("tau=60: the corrected sd is sigma*sqrt(20*G_RATIO[20])",
+          got == SIGMA * (D(20) * pfair.G_RATIO[20]).sqrt(), str(got))
+    check("tau=60: and that is %s at live scale" % CORRECTED_SD_AT_LIVE_SCALE[60],
+          abs(got - CORRECTED_SD_AT_LIVE_SCALE[60]) < SD_LITERAL_TOLERANCE, str(got))
+    check("tau=60: the two branches no longer meet, because only the far one is corrected",
+          got != pfair.near_branch(60, S_T, K, SIGMA, M_R)[1])
+    check("tau=60: the near branch at 59 and the far branch at 60 straddle the step",
+          pfair.corrected_sd(59, SIGMA) < pfair.corrected_sd(60, SIGMA))
+
+
+def tz07a_the_correction_on_the_far_branch():
+    """The far branch is widened by exactly `sqrt(G_RATIO[tau - 40])` and by nothing else."""
+    for tau in (240, 180, 120, 90, 60):
+        got = pfair.corrected_sd(tau, SIGMA)
+        plain = pfair.far_branch(tau, S_T, K, SIGMA)[1]
+        check("tau=%d: the corrected sd is %s at live scale"
+              % (tau, CORRECTED_SD_AT_LIVE_SCALE[tau]),
+              abs(got - CORRECTED_SD_AT_LIVE_SCALE[tau]) < SD_LITERAL_TOLERANCE, str(got))
+        check("tau=%d: the correction widens the far branch" % tau, got > plain,
+              "%s <= %s" % (got, plain))
+        check("tau=%d: it widens it by sqrt(G_RATIO[%d])" % (tau, tau - 40),
+              abs(got / plain - pfair.G_RATIO[tau - 40].sqrt()) < D("1e-50"),
+              str(got / plain))
+        # Linearity is exact in the reals and holds here to the width of the context, not
+        # bit for bit: `(4*sigma)*sqrt(X)` rounds once where `4*(sigma*sqrt(X))` rounds
+        # twice, and at tau 180 and 60 the two land one unit in the last place apart. `1e-55`
+        # relative is five digits looser than that ulp and forty-five digits tighter than any
+        # real non-linearity, which would show in the first digits.
+        check("tau=%d: the corrected sd is linear in sigma" % tau,
+              abs(pfair.corrected_sd(tau, SIGMA * D(4)) / (got * D(4)) - 1) < D("1e-55"),
+              str(pfair.corrected_sd(tau, SIGMA * D(4)) / (got * D(4))))
+        check("tau=%d: state is untouched by the correction" % tau,
+              pfair.far_branch(tau, S_T, K, SIGMA)[0] == S_T - K)
+    check("a wider tau is still a wider corrected sd",
+          pfair.corrected_sd(240, SIGMA) > pfair.corrected_sd(120, SIGMA))
+
+
+def tz07a_the_table_is_a_table_of_literals():
+    """`G_RATIO` is the five far-branch horizons, frozen, and nothing is fitted at run time."""
+    check("G_RATIO carries exactly the far-branch horizons of the five gated taus at or above 60",
+          sorted(pfair.G_RATIO) == sorted(tau - 40 for tau in pfair.GATED_TAUS
+                                          if tau >= pfair.SETTLEMENT_S),
+          str(sorted(pfair.G_RATIO)))
+    check("every literal is a Decimal, so the pricer never leaves exact arithmetic",
+          all(isinstance(v, D) for v in pfair.G_RATIO.values()))
+    check("every literal carries six significant digits",
+          all(len(v.as_tuple().digits) == 6 for v in pfair.G_RATIO.values()),
+          str([str(v) for v in pfair.G_RATIO.values()]))
+    check("every literal is above one: a one-second reading understates the diffusion",
+          all(v > 1 for v in pfair.G_RATIO.values()))
+    refused = False
+    try:
+        pfair.corrected_sd(100, SIGMA)
+    except AssertionError:
+        refused = True
+    check("a tau at or above 60 with no measured horizon is refused, not extrapolated", refused)
+
+
 # ---- the section 3 machinery -----------------------------------------------------
 
 def machinery_time_weighted_mean():
@@ -207,6 +307,10 @@ if __name__ == "__main__":
                                v5_realised_path_has_zero_weight_far_out,
                                v5_realised_mean_enters_with_its_weight,
                                v5_p_fair_moves_the_right_way)),
+                       ("TZ-07a", (tz07a_the_near_branch_is_untouched,
+                                   tz07a_the_correction_at_the_boundary,
+                                   tz07a_the_correction_on_the_far_branch,
+                                   tz07a_the_table_is_a_table_of_literals)),
                        ("machinery", (machinery_time_weighted_mean,
                                       machinery_second_grid_and_sigma,
                                       machinery_merge_is_not_a_fill))):
@@ -216,6 +320,8 @@ if __name__ == "__main__":
             fn()
     total = sum(COUNTS.values())
     print("\nV5: %d of %d checks passed" % (COUNTS["V5"], COUNTS["V5"]))
+    print("TZ-07a section 4: %d of %d checks passed"
+          % (COUNTS["TZ-07a"], COUNTS["TZ-07a"]))
     print("section 3 machinery: %d of %d checks passed"
           % (COUNTS["machinery"], COUNTS["machinery"]))
     print("%d of %d checks passed" % (total, total))
