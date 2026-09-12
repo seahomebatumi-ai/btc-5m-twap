@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """TZ-04b validation: V1 through V7, as counts, over the section 6 scoring set.
 
+Repaired by TZ-06 section 5, R-c: `recorder_start` no longer asserts that the recorder was
+never restarted. See its docstring.
+
 The tests in TZ-04b section 6 are the Architect's. This file runs them and reports what they
 return. It does not design, extend, relax or substitute them, and it does not stop on a red
 result - a red result is a finding. It does abort, by assert, when the capture contradicts a
@@ -190,7 +193,16 @@ def s6_carries_price_to_beat(t0):
 # ---- scoring set ----------------------------------------------------------------
 
 def recorder_start():
-    """The start record of the one process on 3895356, from the recorder's runtime log."""
+    """The start record of the one process on 3895356, and the start that bounds its span.
+
+    TZ-06 section 5, R-c. This used to assert that no start record follows ours. The TZ-05a
+    restart made that permanently false, so the assertion killed the analysis rather than
+    guarding it. The guarantee it encoded - that nothing is scored across a restart boundary -
+    is kept by naming where the span ends instead of denying that it ends: `next_start_recv_ns`
+    is the first start after ours, or None while there is none, and `build` requires every
+    scored interval's window to close before it. The assertion that exactly one start exists
+    on RECORDER_SHA stays, because the analysis is of that one process.
+    """
     starts = []
     with open(RUNTIME_PATH, encoding="utf-8") as fh:
         for line in fh:
@@ -203,9 +215,18 @@ def recorder_start():
     ours = [r for r in starts if r["sha"] == RECORDER_SHA]
     assert len(ours) == 1, "expected one process start on %s, found %d" % (RECORDER_SHA,
                                                                            len(ours))
-    later = [r for r in starts if r["recv_ns"] > ours[0]["recv_ns"]]
-    assert not later, "the recorder was restarted after the %s start: %r" % (RECORDER_SHA, later)
-    return ours[0]
+    later = sorted(r["recv_ns"] for r in starts if r["recv_ns"] > ours[0]["recv_ns"])
+    return dict(ours[0], next_start_recv_ns=later[0] if later else None)
+
+
+def within_span(t0, next_start_recv_ns):
+    """Whether interval `t0`'s whole window closes before the next recorder start.
+
+    The window is [T0 - 90, T0 + 330], so it closes at T0 + 330. An unbounded span - no start
+    after ours - contains everything.
+    """
+    return (next_start_recv_ns is None
+            or (t0 + config.POST_S) * NS <= next_start_recv_ns)
 
 
 def first_scoring_t0(start_epoch):
@@ -705,12 +726,16 @@ def build():
         doc = manifests.get(row["T0"])
         assert doc is None or doc["recorder_git_sha"] == RECORDER_SHA, (
             "interval %d was captured by %r" % (row["T0"], doc["recorder_git_sha"]))
+        assert within_span(row["T0"], start["next_start_recv_ns"]), (
+            "interval %d's window closes after the next recorder start at %d"
+            % (row["T0"], start["next_start_recv_ns"]))
     v1, v2 = score(rows)
     members = [r["T0"] for r in rows if r["member"]]
     return {
         "start": {"tz_utc": RECORDER_START_UTC, "logged_recv_ns": start["recv_ns"],
                   "logged_utc": utc_ms(start["recv_ns"]), "sha": start["sha"],
-                  "first_T0": start_t0},
+                  "first_T0": start_t0,
+                  "next_start_recv_ns": start["next_start_recv_ns"]},
         "scoring_set": {"full": full, "size_required": SET_SIZE, "members": len(members),
                         "first_T0": rows[0]["T0"] if rows else None,
                         "last_member_T0": members[-1] if members else None,
