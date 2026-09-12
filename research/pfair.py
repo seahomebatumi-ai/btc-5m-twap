@@ -96,46 +96,52 @@ def p_fair(state, sd):
     return phi(float(state / sd))
 
 
-# ---- TZ-07a section 4: the measured variance-time correction ---------------------
+# ---- TZ-07b section 5: the measured scale of the settlement quantity --------------
 
-# TZ-07a M1, measured over the 400 TZ-06 members: the oracle feed's variance does not grow
-# linearly in the lag it is read at. `sigma` is estimated on one-second increments of a
-# smoothed, aggregated feed, and one-second increments understate the diffusion; extrapolating
-# them by `sqrt` out to 260 seconds understates it further, and by more the further it goes.
-# `G_RATIO[h]` is `sigma_h^2 / sigma_1^2` at lag `h`, pooled over every overlapping increment
-# of every member, to six significant digits.
+# TZ-07b M1, measured over the same 400 TZ-06 members: the dispersion of the exact random
+# variable this `sd` describes, and of nothing else. At `tau >= 60` that variable is the
+# feed's mean over the last sixty seconds minus the reading in force now - a lead of
+# `tau - 60` seconds plus a sixty-second average - and below 60 it is the future part of that
+# average carrying the weight the model gives it. `SD_SCALE[tau]` is the root mean square of
+# `Y / (sigma * sqrt(H(tau)))` pooled over every admissible anchor of every member, to six
+# significant digits.
+#
+# It replaces TZ-07a's `G_RATIO`, which was measured correctly and composed wrongly: `g(h)` is
+# the dispersion of a single increment over lag `h`, so multiplying the whole of `tau - 40` by
+# `g(tau - 40)` scaled the averaging part of the horizon by a ratio belonging to the lead part
+# alone. The superseded table is not kept alongside this one - a superseded constant left in
+# the pricer is a trap for whoever reads it next - and `c44af68` holds it in history.
 #
 # These are **literals, not a fit performed at run time**. A pricer that re-derives its
 # constants from whatever data it is pointed at cannot be tested out of sample, and TZ-08
 # scores this file as it stands here. Changing a value is a new TZ and a new map revision.
 #
-# The keys are the far branch's variance horizons `tau - 40` at the five gated taus at or
-# above 60: `tau` 240 / 180 / 120 / 90 / 60.
-G_RATIO = {200: D("2.18300"), 140: D("2.13471"), 80: D("2.06184"), 50: D("1.94691"),
-           20: D("1.95609")}
+# The keys are every `tau` the pricer serves, `10` included: every tau a gate scores carries a
+# measured constant, and nothing is ever extrapolated to one that does not.
+SD_SCALE = {240: D("1.52376"), 180: D("1.49602"), 120: D("1.49628"), 90: D("1.47915"),
+            60: D("1.44466"), 30: D("1.38581"), 10: D("1.21118")}
 
 
 def corrected_sd(tau, sigma):
-    """TZ-07a section 4's `sd`: the same model, with `sigma` read at the scale it is used at.
+    """TZ-07b section 5's `sd`: the same model, at the scale its own residual was measured at.
 
-        tau >= 60:   sd = sigma * sqrt((tau - 40) * G_RATIO[tau - 40])
-        tau <  60:   sd = sigma * sqrt(tau**3 / 10800)
+        sd = SD_SCALE[tau] * sigma * sqrt(H(tau))
+
+        H(tau) = tau - 40            for tau >= 60
+        H(tau) = tau**3 / 10800      for tau <  60          # H(60) = 20 on both branches
 
     The CANON section 1.2 formula is not modified and neither is `sigma`: `realised_sigma`
     over the causal window `[T0 - 300, T0 + t]` is the input here exactly as it is to
-    `state_and_sd`. Only the horizon the one-second reading is carried to changes.
-
-    Below `tau = 60` `G` is exactly 1, fixed by TZ-07a section 4 and not after the fact: the
-    near branch's horizon is 2.5 s at `tau = 30` and 0.09 s at `tau = 10`, at or below the
-    feed's own 1 Hz cadence, where no ratio is measurable. The near branch is therefore
-    returned unchanged, and `selftest-pfair.py` asserts that it is the same value bit for bit.
+    `state_and_sd`, `state` is untouched on both branches, and `H` is the horizon those
+    branches already use. Only the constant multiplying the product changes.
     """
+    assert tau in SD_SCALE, "tau = %s has no measured scale; TZ-07b measured %s" % (
+        tau, sorted(SD_SCALE))
     if tau < SETTLEMENT_S:
-        return sigma * (D(tau) ** 3 / D(TAU_CUBED_DIVISOR)).sqrt()
-    horizon = tau - 40
-    assert horizon in G_RATIO, \
-        "tau = %s needs G_RATIO[%s]; TZ-07a measured %s" % (tau, horizon, sorted(G_RATIO))
-    return sigma * (D(horizon) * G_RATIO[horizon]).sqrt()
+        h = D(tau) ** 3 / D(TAU_CUBED_DIVISOR)
+    else:
+        h = D(tau - 40)
+    return SD_SCALE[tau] * sigma * h.sqrt()
 
 
 # ---- the quantities the model is fed --------------------------------------------
