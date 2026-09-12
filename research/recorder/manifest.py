@@ -1,4 +1,4 @@
-"""TZ-04a per-interval manifest.
+"""TZ-04a per-interval manifest, extended by TZ-05a section 3 with the Tier C accounting.
 
 The manifest is a pure function of the files already sitting in an interval directory. That is
 what makes V5 a real test: `build()` reads only the directory, so rebuilding it later must
@@ -71,6 +71,40 @@ def _stream_stats(dirpath, stream):
         "stored_bytes": stored,
         "unparseable_lines": torn,
     }
+
+
+def _quote_reads(dirpath):
+    """Every Tier C read line this directory holds, read back off disk like everything else.
+
+    Each returned record carries the read's `tau`, `token_id` and HTTP `status` as captured,
+    plus `body_is_json`, which is whether the stored body parses. Nothing here inspects what
+    is inside that body.
+    """
+    path = _stream_path(dirpath, config.QUOTES_STEM)
+    out = []
+    if not os.path.exists(path):
+        return out
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                recv_ns, tau = rec["recv_ns"], rec["tau"]
+            except (ValueError, KeyError, TypeError):
+                continue                # a line cut short by a process dying mid-write
+            body = rec.get("raw")
+            try:
+                json.loads(body)
+                body_is_json = True
+            except (ValueError, TypeError):
+                body_is_json = False
+            out.append({"recv_ns": recv_ns, "tau": tau,
+                        "token_id": str(rec.get("token_id")),
+                        "status": rec.get("status"), "body_is_json": body_is_json})
+    return out
 
 
 def _runtime(dirpath):
@@ -151,9 +185,11 @@ def build(dirpath):
           "reason": r.get("reason", "")} for r in runtime if r.get("kind") == "disconnect"),
         key=lambda r: (r["start_recv_ns"], r["end_recv_ns"]),
     )
+    # After TZ-05a section 5 R-b a burst whose every reply was rejected yields no offset at
+    # all. Such a sample is still a record: it is carried with a null offset, never dropped.
     clock = sorted(
-        ({"recv_ns": r["recv_ns"], "server": r["server"], "offset_ms": r["offset_ms"],
-          "rtt_ms": r["rtt_ms"]} for r in runtime if r.get("kind") == "clock"),
+        ({"recv_ns": r["recv_ns"], "server": r["server"], "offset_ms": r.get("offset_ms"),
+          "rtt_ms": r.get("rtt_ms")} for r in runtime if r.get("kind") == "clock"),
         key=lambda r: (r["recv_ns"], r["server"]),
     )
     shas = sorted({r["sha"] for r in runtime if r.get("kind") == "recorder"})
@@ -161,11 +197,23 @@ def build(dirpath):
     gamma_ok = _gamma_present(dirpath)
     resolution_ok = resolution_present(dirpath)
 
+    # TZ-05a section 3: `quotes_complete` is all 14 reads returned HTTP 200 and each response
+    # body parsed as JSON. It is independent of `complete`, which keeps its TZ-04b meaning.
+    quote_reads = sorted(_quote_reads(dirpath), key=lambda r: (r["recv_ns"], r["token_id"]))
+    quotes_complete = (len(quote_reads) == config.QUOTE_READS_PER_INTERVAL
+                       and all(r["status"] == 200 and r["body_is_json"] for r in quote_reads))
+    quote_offsets = [
+        {"tau": r["tau"], "token_id": r["token_id"], "status": r["status"],
+         "offset_ms": (r["recv_ns"] - config.quote_checkpoint_epoch(t0, r["tau"]) * 10 ** 9)
+                      / 1e6}
+        for r in quote_reads
+    ]
+
     # TZ-04a section 4: `complete` is zero disconnects on S1 and S3 across the whole window,
     # with S6 and S7 both present. S1-S4 share one socket, so any disconnect touches both.
     complete = (not disconnects) and gamma_ok and resolution_ok
 
-    offsets = [abs(c["offset_ms"]) for c in clock]
+    offsets = [abs(c["offset_ms"]) for c in clock if c["offset_ms"] is not None]
     return {
         "T0_epoch": t0,
         "window_epoch": window,
@@ -180,6 +228,8 @@ def build(dirpath):
         "gamma_present": gamma_ok,
         "resolution_present": resolution_ok,
         "complete": complete,
+        "quotes_complete": quotes_complete,
+        "quote_offsets_ms": quote_offsets,
     }
 
 
