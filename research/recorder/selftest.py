@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-tests for the TZ-04a recorder.
+"""Self-tests for the TZ-04a recorder and the TZ-05a Tier C and clock repairs.
 
 Every check here is an assert that aborts the run. Nothing is recorded into a summary and
 called a check. Run:  python3 selftest.py
@@ -85,10 +85,39 @@ def test_gzip_determinism():
         check("gzip output is byte-identical across runs", h1 == h2, "%s %s" % (h1, h2))
 
 
-def _synthetic_interval(root, t0, disconnect=False, gamma=True, resolution=True):
+def _quote_lines(t0, kind="complete"):
+    """The Tier C read lines a synthetic interval holds, one per token id per checkpoint."""
+    tokens = ["77" * 8, "99" * 8]
+    lines, n = [], 0
+    for tau in config.QUOTE_TAUS:
+        for token_id in tokens:
+            n += 1
+            if kind == "short" and n > config.QUOTE_READS_PER_INTERVAL - 2:
+                continue
+            status, body = 200, '{"asset_id":"%s","tick_size":"0.01"}' % token_id
+            if kind == "one-404" and n == 5:
+                status, body = 404, '{"error":"no orderbook exists"}'
+            if kind == "bad-body" and n == 5:
+                body = '{"asset_id": tr'          # a reply that is not JSON
+            # 41 ms after the checkpoint, so the offset is a known non-zero number
+            recv_ns = config.quote_checkpoint_epoch(t0, tau) * 10 ** 9 + 41 * 10 ** 6
+            lines.append(json.dumps({"recv_ns": recv_ns, "mono_ns": n, "tau": tau,
+                                     "token_id": token_id, "status": status, "raw": body},
+                                    ensure_ascii=False, separators=(",", ":")) + "\n")
+    return lines
+
+
+def _synthetic_interval(root, t0, disconnect=False, gamma=True, resolution=True,
+                        quotes="complete"):
     path = os.path.join(root, str(t0))
     os.makedirs(path, exist_ok=True)
     base = t0 * 10 ** 9
+    if quotes != "none":
+        plain = os.path.join(path, config.QUOTES_STEM + ".jsonl")
+        with open(plain, "w", encoding="utf-8") as fh:
+            fh.writelines(_quote_lines(t0, quotes))
+        recorder.gzip_file(plain, plain + ".gz")
+        os.remove(plain)
     for i, stream in enumerate(config.STREAM_FILES):
         plain = os.path.join(path, stream + ".jsonl")
         with open(plain, "w", encoding="utf-8") as fh:
@@ -313,11 +342,174 @@ def test_no_interpolation_anywhere():
     check("no gap-filling primitive appears in any recorder file", True)
 
 
+def test_tier_c_checkpoints():
+    """TZ-05a section 3 states the checkpoints twice, as tau and as t. They must agree."""
+    t0 = 1789033200
+    check("the seven checkpoints are the TZ's tau values",
+          tuple(config.QUOTE_TAUS) == (240, 180, 120, 90, 60, 30, 10), str(config.QUOTE_TAUS))
+    got = [config.quote_checkpoint_epoch(t0, tau) - t0 for tau in config.QUOTE_TAUS]
+    check("tau maps to the t values the TZ prints", got == [60, 120, 180, 210, 240, 270, 290],
+          str(got))
+    check("every checkpoint is inside the interval",
+          all(0 < t < config.INTERVAL_S for t in got))
+    check("the last checkpoint is inside the window the recorder keeps open",
+          max(got) < config.POST_S)
+    check("there are fourteen reads per interval",
+          config.QUOTE_READS_PER_INTERVAL == 14, str(config.QUOTE_READS_PER_INTERVAL))
+    # The two closest checkpoints are 20 s apart, so a read may never be allowed to run into
+    # the next one's slot.
+    gaps = [b - a for a, b in zip(got, got[1:])]
+    check("no read may outlive the gap to the next checkpoint",
+          recorder.QUOTE_TIMEOUT_S < min(gaps),
+          "timeout=%s min gap=%s" % (recorder.QUOTE_TIMEOUT_S, min(gaps)))
+
+    # A process that starts mid-interval reads what is left, and never reads a checkpoint
+    # whose instant has gone by.
+    ahead = config.quote_checkpoints_ahead(t0, t0 - 90)
+    check("a process running from the window's open reads all seven",
+          [tau for tau, _w in ahead] == list(config.QUOTE_TAUS))
+    ahead = config.quote_checkpoints_ahead(t0, t0 + 211)
+    check("a process starting at T0 + 211 reads only the three still ahead",
+          [tau for tau, _w in ahead] == [60, 30, 10], str(ahead))
+    check("a checkpoint is read at its own instant, not skipped there",
+          [tau for tau, _w in config.quote_checkpoints_ahead(t0, t0 + 210)][0] == 90)
+    check("a process starting after the last checkpoint reads nothing",
+          config.quote_checkpoints_ahead(t0, t0 + 291) == [])
+
+
+def test_tier_c_line_and_manifest():
+    """quotes_complete is 14 reads, all HTTP 200, every body parsing as JSON. Nothing less."""
+    t0 = 1789033200
+    with tempfile.TemporaryDirectory() as tmp:
+        doc = manifest.build(_synthetic_interval(tmp, t0))
+        check("a clean interval has quotes_complete", doc["quotes_complete"] is True)
+        check("every read is carried in quote_offsets_ms",
+              len(doc["quote_offsets_ms"]) == 14, str(len(doc["quote_offsets_ms"])))
+        check("the offset is signed and measured against the intended instant",
+              {round(o["offset_ms"], 6) for o in doc["quote_offsets_ms"]} == {41.0},
+              str(doc["quote_offsets_ms"][:1]))
+        check("each offset carries the checkpoint it belongs to",
+              sorted({o["tau"] for o in doc["quote_offsets_ms"]})
+              == sorted(config.QUOTE_TAUS))
+        cases = [("a single non-200 read", "one-404"),
+                 ("a body that is not JSON", "bad-body"),
+                 ("fewer than fourteen reads", "short"),
+                 ("no Tier C file at all", "none")]
+        for i, (name, kind) in enumerate(cases):
+            d = manifest.build(_synthetic_interval(tmp, 1789050000 + i * 300, quotes=kind))
+            check("%s makes quotes_complete false" % name, d["quotes_complete"] is False)
+            check("%s leaves complete untouched" % name, d["complete"] is True)
+        early = manifest.build(_synthetic_interval(tmp, 1789060000, quotes="none"))
+        check("an interval with no Tier C file has no offsets",
+              early["quote_offsets_ms"] == [])
+
+
+def test_tier_c_manifest_determinism():
+    """The Tier C keys must rebuild byte-identically from the directory, like everything else."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _synthetic_interval(tmp, 1789033200)
+        manifest.write(path)
+        h1 = hashlib.sha256(open(os.path.join(path, "manifest.json"), "rb").read()).hexdigest()
+        manifest.write(path)
+        h2 = hashlib.sha256(open(os.path.join(path, "manifest.json"), "rb").read()).hexdigest()
+        check("a manifest carrying Tier C rebuilds byte-identically", h1 == h2,
+              "%s %s" % (h1, h2))
+
+
+def _sntp_fields(leap=0, stratum=2, transmit_raw=None, host_now=1789203300.0):
+    """A 12-word SNTP reply, as struct.unpack('!12I') returns one."""
+    if transmit_raw is None:
+        transmit_raw = int(host_now + 2208988800)
+    first = (leap << 30) | (4 << 27) | (4 << 24) | (stratum << 16) | (6 << 8) | 0xEC
+    return (first, 0, 0, 0, 0, 0, 0, 0, transmit_raw, 0, transmit_raw, 0)
+
+
+def _reason(fields, host_now=1789203300.0):
+    t3 = fields[10] + fields[11] / 2 ** 32 - 2208988800
+    return recorder.sntp_reject_reason(fields, t3, host_now)
+
+
+def test_sntp_reply_validation():
+    """TZ-05a section 5 R-b, condition by condition, at the host's real clock magnitude."""
+    check("the skew limit is exactly 86_400 seconds", config.SNTP_MAX_SKEW_S == 86400,
+          str(config.SNTP_MAX_SKEW_S))
+    check("a well-formed reply is accepted", _reason(_sntp_fields()) is None)
+    check("leap indicator 3 is rejected",
+          _reason(_sntp_fields(leap=3)) == "leap-indicator-3")
+    check("stratum 0 is rejected", _reason(_sntp_fields(stratum=0)) == "stratum-0")
+    check("stratum 16 is rejected", _reason(_sntp_fields(stratum=16)) == "stratum-above-15")
+    check("stratum 15 is still accepted", _reason(_sntp_fields(stratum=15)) is None)
+    check("a zero transmit timestamp is rejected",
+          _reason(_sntp_fields(transmit_raw=0)) == "zero-transmit-timestamp")
+    far = _sntp_fields(transmit_raw=int(1789203300.0 + 2208988800 - 86401))
+    check("a transmit timestamp 86_401 s adrift is rejected",
+          _reason(far) == "transmit-timestamp-beyond-86400s", str(_reason(far)))
+    near = _sntp_fields(transmit_raw=int(1789203300.0 + 2208988800 - 86399))
+    check("a transmit timestamp 86_399 s adrift is not", _reason(near) is None)
+
+    # The reply that actually reached this host: NTP-era-origin timestamps, which the TZ-04b
+    # client turned into an offset near -3.998e12 ms and let dominate the statistics.
+    era_zero = _sntp_fields(transmit_raw=0)
+    t3 = era_zero[10] + era_zero[11] / 2 ** 32 - 2208988800
+    offset_ms = ((t3 - 1789203300.0) + (t3 - 1789203300.0)) / 2 * 1000.0
+    check("that reply would have carried an offset near -3.998e12 ms",
+          -4.0e12 < offset_ms < -3.9e12, str(offset_ms))
+    check("it is rejected before it can become one", _reason(era_zero) is not None)
+
+
+def test_sntp_rejections_are_counted():
+    """A rejection is counted per server, not silently dropped and not filtered afterwards."""
+    real_offset, real_lookup = recorder.sntp_offset, recorder.socket.gethostbyname
+    calls = []
+
+    def fake_offset(_host, timeout=5):
+        calls.append(1)
+        if len(calls) == 2:
+            return 0.001234, 0.002000
+        raise recorder.SntpRejected("zero-transmit-timestamp")
+
+    try:
+        recorder.socket.gethostbyname = lambda h: "203.0.113.1"
+        recorder.sntp_offset = fake_offset
+        ip, offset, rtt, accepted, rejected = recorder.sntp_best("pool.example", burst=4)
+        check("the one accepted reply is the offset", offset == 0.001234 and accepted == 1,
+              "%s %s" % (offset, accepted))
+        check("the other three are counted by reason",
+              rejected == {"zero-transmit-timestamp": 3}, str(rejected))
+        calls.clear()
+        recorder.sntp_offset = lambda _h, timeout=5: (_ for _ in ()).throw(
+            recorder.SntpRejected("leap-indicator-3"))
+        ip, offset, rtt, accepted, rejected = recorder.sntp_best("pool.example", burst=4)
+        check("a burst rejected outright yields no offset at all",
+              offset is None and rtt is None and accepted == 0)
+        check("and its rejections are still reported",
+              rejected == {"leap-indicator-3": 4}, str(rejected))
+    finally:
+        recorder.sntp_offset, recorder.socket.gethostbyname = real_offset, real_lookup
+
+    # A manifest must survive a clock record that carries no offset.
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _synthetic_interval(tmp, 1789033200)
+        with open(os.path.join(path, manifest.RUNTIME_NAME), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"kind": "clock", "recv_ns": 1789033200 * 10 ** 9,
+                                 "server": "pool.example", "offset_ms": None, "rtt_ms": None,
+                                 "rejected": {"zero-transmit-timestamp": 4}},
+                                sort_keys=True) + "\n")
+        doc = manifest.build(path)
+        check("a sample with no offset is carried, not dropped",
+              len(doc["clock_offset_samples"]) == 2)
+        check("it does not become the largest offset",
+              doc["clock_offset_abs_max_ms"] == 1.25, str(doc["clock_offset_abs_max_ms"]))
+
+
 if __name__ == "__main__":
     for fn in (test_window_geometry, test_line_format, test_gzip_determinism,
                test_manifest_determinism, test_complete_definition, test_resolved_outcome,
                test_published_precision, test_clock_filter, test_restart_edges,
                test_floors_are_the_tz_values, test_scoring_set, test_rules_at_live_scale,
+               test_tier_c_checkpoints, test_tier_c_line_and_manifest,
+               test_tier_c_manifest_determinism, test_sntp_reply_validation,
+               test_sntp_rejections_are_counted,
                test_no_interpolation_anywhere):
         print(fn.__name__)
         fn()

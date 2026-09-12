@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """TZ-04a Tier A recorder: continuous read-only capture of S1-S4, S6 and S7.
 
+TZ-05a adds Tier C to the same process: seven order-book snapshots per interval per token id,
+issued as plain GETs to the public CLOB endpoint and stored exactly as returned. It also
+applies TZ-05a section 5 R-b, which rejects an invalid SNTP reply at the point of reception.
+
 Read-only by construction. There is no order path, no CLOB authentication, no wallet, key,
 signer or credential anywhere in this file, and no pricing arithmetic: frames are routed by
 topic and written byte-for-byte as received.
@@ -30,6 +34,7 @@ S7_DEADLINE_S = 3600        # stop polling for the venue's outcome at T0 + 3600
 S7_POLL_S = 15
 RECV_TIMEOUT_S = 30         # no frame for this long means the socket is dead
 NTP_BURST = 4               # SNTP queries per server per round; the lowest-delay reply is kept
+QUOTE_TIMEOUT_S = 8         # shorter than the 20 s between the two closest Tier C checkpoints
 
 
 def log(msg):
@@ -52,8 +57,41 @@ def git_sha():
         return "unknown"
 
 
+class SntpRejected(Exception):
+    """An SNTP reply that TZ-05a section 5 R-b forbids turning into an offset."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def sntp_reject_reason(fields, t3, host_now):
+    """Why this reply must be rejected, or None when it may be used.
+
+    TZ-05a section 5 R-b, in the order the TZ lists the conditions. The check is here, at
+    reception, and not on the samples afterwards: a reply that fails it never becomes an
+    offset and is counted as a rejection instead.
+    """
+    leap = (fields[0] >> 30) & 0x3
+    stratum = (fields[0] >> 16) & 0xFF
+    if leap == 3:
+        return "leap-indicator-3"
+    if stratum == 0:
+        return "stratum-0"
+    if stratum > 15:
+        return "stratum-above-15"
+    if fields[10] == 0 and fields[11] == 0:
+        return "zero-transmit-timestamp"
+    if abs(t3 - host_now) > config.SNTP_MAX_SKEW_S:
+        return "transmit-timestamp-beyond-%ds" % config.SNTP_MAX_SKEW_S
+    return None
+
+
 def sntp_offset(host, timeout=5):
-    """One SNTP round trip. Returns (offset_seconds, round_trip_seconds)."""
+    """One SNTP round trip. Returns (offset_seconds, round_trip_seconds).
+
+    Raises SntpRejected when the reply fails the R-b validation above.
+    """
     pkt = b"\x1b" + 47 * b"\0"
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(timeout)
@@ -67,6 +105,9 @@ def sntp_offset(host, timeout=5):
     fields = struct.unpack("!12I", data)
     t2 = fields[8] + fields[9] / 2 ** 32 - 2208988800
     t3 = fields[10] + fields[11] / 2 ** 32 - 2208988800
+    reason = sntp_reject_reason(fields, t3, t4)
+    if reason is not None:
+        raise SntpRejected(reason)
     return ((t2 - t1) + (t3 - t4)) / 2, (t4 - t1) - (t3 - t2)
 
 
@@ -80,18 +121,25 @@ def best_sample(samples):
 
 
 def sntp_best(host, burst=NTP_BURST):
-    """A burst against one resolved address. Returns (ip, offset_s, rtt_s, replies) or None."""
+    """A burst against one resolved address.
+
+    Returns (ip, offset_s, rtt_s, accepted, rejected), where `rejected` maps each R-b reason
+    to the number of replies it rejected. A burst whose every reply is rejected still returns,
+    with `offset_s` and `rtt_s` None, so that the rejections are recorded rather than lost.
+    """
     ip = socket.gethostbyname(host)
-    samples = []
+    samples, rejected = [], {}
     for _ in range(burst):
         try:
             samples.append(sntp_offset(ip))
+        except SntpRejected as exc:
+            rejected[exc.reason] = rejected.get(exc.reason, 0) + 1
         except Exception:
             pass
     if not samples:
-        return None
+        return ip, None, None, 0, rejected
     offset, rtt = best_sample(samples)
-    return ip, offset, rtt, len(samples)
+    return ip, offset, rtt, len(samples), rejected
 
 
 def last_frame_ns(root):
@@ -150,6 +198,22 @@ def fetch(url, timeout=15):
     req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
+
+
+def fetch_status(url, timeout=15):
+    """One GET. Returns (http_status, body_text).
+
+    TZ-05a section 3 stores a non-200 reply as received, with its status, so a 4xx or 5xx is
+    a result here and not an exception. Only a read that produced no reply at all raises.
+    """
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": config.USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as err:
+        return err.code, err.read().decode("utf-8", "replace")
 
 
 class Recorder:
@@ -248,7 +312,11 @@ class Recorder:
         os.makedirs(path, exist_ok=True)
         try:
             await self.fetch_s6(t0, path)
+            # Tier C reads the S6 document the line above captured, so it starts after it.
+            # Its last checkpoint is T0 + 290, well inside the window closing at T0 + 333.
+            quotes = asyncio.create_task(self.quotes(t0, path))
             await sleep_until(t0 + config.POST_S + GRACE_S)
+            await asyncio.gather(quotes, return_exceptions=True)
             for stream in config.STREAM_FILES:
                 fh = self.writers.pop((t0, stream), None)
                 if fh is not None:
@@ -261,7 +329,7 @@ class Recorder:
             self.live.discard(t0)
 
     async def close_interval(self, t0, path):
-        for stream in config.STREAM_FILES:
+        for stream in config.STREAM_FILES + [config.QUOTES_STEM]:
             src = os.path.join(path, stream + ".jsonl")
             if os.path.exists(src):
                 gzip_file(src, src + ".gz")
@@ -269,8 +337,8 @@ class Recorder:
         await self.fetch_s7(t0, path)
         self.write_runtime_slice(t0, path)
         doc = manifest.write(path)
-        log("closed %d complete=%s msgs=%s" % (
-            t0, doc["complete"],
+        log("closed %d complete=%s quotes_complete=%s msgs=%s" % (
+            t0, doc["complete"], doc["quotes_complete"],
             {s: doc["streams"][s]["messages"] for s in config.STREAM_FILES}))
         self.check_floors("close of interval %d" % t0)
 
@@ -341,6 +409,67 @@ class Recorder:
             await asyncio.sleep(S7_POLL_S)
         log("S7 unresolved at deadline for %d" % t0)
 
+    # ---- Tier C ------------------------------------------------------------------
+
+    def tokens_for(self, t0, path):
+        """The market's token ids, read out of the S6 document this interval already holds.
+
+        TZ-05a section 3 names the source: the Gamma document captured as S6, which carries
+        `clobTokenIds` and `outcomes` as parallel JSON-encoded arrays. Nothing is fetched
+        again for this, and nothing about the ids is interpreted here.
+        """
+        try:
+            with open(os.path.join(path, "gamma.json"), "rt", encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            return []
+        market = doc[0] if isinstance(doc, list) else doc
+        try:
+            ids = json.loads(market["clobTokenIds"])
+        except (KeyError, TypeError, ValueError):
+            return []
+        return [str(i) for i in ids] if isinstance(ids, list) else []
+
+    async def one_quote(self, tau, token_id):
+        """One checkpoint read, returned as the line that will be written for it.
+
+        `recv_ns` is stamped when the reply lands, exactly as every other stream stamps it.
+        A read that produced no reply is recorded with a null status and null body: TZ-05a
+        section 3 forbids retrying it into the next checkpoint's slot and forbids inventing
+        a value for it.
+        """
+        url = config.CLOB_BOOK_BY_TOKEN.format(token_id=token_id)
+        try:
+            status, body = await asyncio.to_thread(fetch_status, url, QUOTE_TIMEOUT_S)
+        except Exception as exc:
+            recv_ns, mono_ns = now_pair()
+            rec = {"recv_ns": recv_ns, "mono_ns": mono_ns, "tau": tau, "token_id": token_id,
+                   "status": None, "raw": None, "error": repr(exc)}
+        else:
+            recv_ns, mono_ns = now_pair()
+            rec = {"recv_ns": recv_ns, "mono_ns": mono_ns, "tau": tau, "token_id": token_id,
+                   "status": status, "raw": body}
+        return json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+    async def quotes(self, t0, path):
+        """TZ-05a section 3: seven checkpoints, one read per token id at each of them."""
+        tokens = self.tokens_for(t0, path)
+        if not tokens:
+            log("interval %d has no token ids: Tier C reads nothing" % t0)
+            return
+        ahead = config.quote_checkpoints_ahead(t0, time.time())
+        if len(ahead) < len(config.QUOTE_TAUS):
+            log("interval %d: %d checkpoints had already passed and are not read"
+                % (t0, len(config.QUOTE_TAUS) - len(ahead)))
+        out = os.path.join(path, config.QUOTES_STEM + ".jsonl")
+        with open(out, "at", encoding="utf-8", buffering=1) as fh:
+            for tau, when in ahead:
+                await sleep_until(when)
+                lines = await asyncio.gather(
+                    *(self.one_quote(tau, token_id) for token_id in tokens))
+                for line in lines:
+                    fh.write(line)
+
     def write_runtime_slice(self, t0, path):
         """The recorder state this interval's manifest needs, copied into the directory.
 
@@ -387,10 +516,13 @@ class Recorder:
                 except Exception:
                     got = None
                 if got is not None:
-                    ip, offset, rtt, replies = got
+                    ip, offset, rtt, replies, rejected = got
                     self.record({"kind": "clock", "recv_ns": time.time_ns(), "server": host,
-                                 "ip": ip, "offset_ms": offset * 1000.0,
-                                 "rtt_ms": rtt * 1000.0, "burst": replies})
+                                 "ip": ip, "burst": replies,
+                                 "offset_ms": None if offset is None else offset * 1000.0,
+                                 "rtt_ms": None if rtt is None else rtt * 1000.0,
+                                 "rejected": rejected,
+                                 "rejected_count": sum(rejected.values())})
             await asyncio.sleep(config.NTP_SAMPLE_S)
 
     # ---- socket ------------------------------------------------------------------
