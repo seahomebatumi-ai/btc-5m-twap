@@ -85,13 +85,19 @@ def qualification(t0, manifests):
     return why
 
 
-def scoring_set(manifests, need=SET_SIZE):
+def scoring_set(manifests, need=SET_SIZE, *, after=None):
     """Section 4: from the earliest interval directory, in T0 order, until `need` members.
 
     Every unit considered gets a row, member or not. The walk is over the 300 s grid rather
     than over the manifests, so an interval with no directory at all still gets one.
+
+    TZ-08a section 5: `after` opens the walk at the earliest directory with `T0 > after`
+    instead. At `None`, the default, the opening is the expression it has always been.
     """
     first = min(int(name) for name in os.listdir(os.path.join(config.ROOT, config.SERIES)))
+    if after is not None:
+        first = min(int(name) for name in os.listdir(os.path.join(config.ROOT, config.SERIES))
+                    if int(name) > after)
     last = max(manifests) if manifests else first
     rows, members, t0 = [], 0, first
     while members < need and t0 <= last:
@@ -359,9 +365,11 @@ def csv_text(scored):
     return "\n".join(lines) + "\n"
 
 
-def build():
+def build(*, after=None, need=SET_SIZE):
+    # TZ-08a section 5: the set-formation window and the member count, handed to `scoring_set`.
+    # The defaults are TZ-06's own set, so a run with no argument is the run it always was.
     manifests = load_manifests()
-    rows, full = scoring_set(manifests)
+    rows, full = scoring_set(manifests, need, after=after)
     members = [r["T0"] for r in rows if r["member"]]
     assert full, "section 4: only %d of %d intervals qualify; the set is never shrunk" % (
         len(members), SET_SIZE)
