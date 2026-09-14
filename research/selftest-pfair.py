@@ -18,10 +18,16 @@ superseded composition and are deleted by name - because that specification is s
 for no other reason. They are counted separately again, so TZ-06's 56 and 18 stay the numbers
 they were.
 
+The `tz10b_*` items are TZ-10b section 5.2's six self-tests of `log_phi`, the tail-accurate
+`log Phi`. They are added after the 104 checks above and counted on their own, so none of those
+numbers moves. The references are 60-digit literals everywhere except `-3 ... 3`, the only
+range in which `pfair.phi` keeps 12 significant digits and so the only range it is compared in.
+
 Run:  python3 -B selftest-pfair.py
 """
 
 import decimal
+import math
 import os
 import sys
 
@@ -31,6 +37,7 @@ import pfair                                                               # noq
 from pfair import D                                                        # noqa: E402
 
 COUNTS = {"V5": 0, "machinery": 0, "TZ-07b": 0}
+COUNTS["TZ-10b"] = 0
 GROUP = "V5"
 
 # Live scale, from the capture: BTC near 100,000 USD and a per-second realised volatility of a
@@ -281,6 +288,126 @@ def machinery_merge_is_not_a_fill():
           (1000, D("100000")) in {(1000, D("100000.000"))})
 
 
+# ---- TZ-10b section 5.2: the tail-accurate log Phi ---------------------------------
+
+# Item 1's literals, each `log(0.5 * erfc(-z / sqrt(2)))` evaluated at 60 decimal digits - a
+# reference independent of both branches under test. `z` is passed as the bare float printed
+# here. The last two sit on the asymptotic branch and the rest on the `erfc` branch.
+LOG_PHI_LITERALS = (("0", "-0.693147180559945"), ("-1", "-1.84102164500926"),
+                    ("-2", "-3.78318433368203"), ("-3", "-6.60772622151035"),
+                    ("-4", "-10.3601014865273"), ("-5", "-15.0649983939887"),
+                    ("-6", "-20.7367689499747"), ("-8", "-35.0134371599145"),
+                    ("-10.819", "-61.8339909672382"), ("-15", "-116.131384845712"),
+                    ("-20", "-203.917155371097"), ("-30", "-454.321243956343"),
+                    ("-36", "-652.503227593798"), ("-40", "-804.608442013754"))
+
+
+def significant(a, b, digits):
+    """Section 5.2's "`digits` significant digits": equality under `%.<digits - 1>e`."""
+    form = "%%.%de" % (digits - 1)
+    return form % a == form % b
+
+
+def relative(a, b):
+    """`|a - b| / |b|`, printed beside every comparison so any other reading can be applied."""
+    return abs(a - b) / abs(b)
+
+
+def tz10b_item_1_the_literals():
+    """`log_phi` equals each 60-digit literal to 12 significant digits, on both branches."""
+    different = []
+    for z_text, want_text in LOG_PHI_LITERALS:
+        z, want = float(z_text), float(want_text)
+        got = pfair.log_phi(z)
+        branch = "erfc" if z > pfair.LOG_PHI_CROSSOVER else "asymptotic"
+        print("      z = %-8s %-10s log_phi %.15g  literal %s  relative %.3g" % (
+            z_text, branch, got, want_text, relative(got, want)))
+        if not significant(got, want, 12):
+            different.append(z_text)
+    check("item 1: log_phi equals all %d literals to 12 significant digits"
+          % len(LOG_PHI_LITERALS), not different, "different at %s" % different)
+
+
+def tz10b_item_2_the_branches_agree_at_the_crossover():
+    """The `erfc` branch and the asymptotic branch agree to 10 significant digits at -30 ... -34."""
+    different = []
+    for z in (-30.0, -32.0, -34.0):
+        near = pfair.log_phi_erfc_branch(z)
+        far = pfair.log_phi_asymptotic_branch(z)
+        print("      z = %g  erfc %.15g  asymptotic %.15g  relative %.3g" % (
+            z, near, far, relative(far, near)))
+        if not significant(far, near, 10):
+            different.append(z)
+    check("item 2: the two branches agree to 10 significant digits at -30, -32 and -34",
+          not different, "different at %s" % different)
+
+
+def tz10b_item_3_the_identity_where_phi_is_sound():
+    """`exp(log_phi(z)) == pfair.phi(z)` to 12 significant digits at the integers -3 ... 3 -
+    the only range in which `pfair.phi` is itself good to 12 digits, and so its only use here."""
+    different = []
+    for z in range(-3, 4):
+        got, want = math.exp(pfair.log_phi(float(z))), pfair.phi(float(z))
+        print("      z = %d  exp(log_phi) %.15g  phi %.15g  relative %.3g" % (
+            z, got, want, relative(got, want)))
+        if not significant(got, want, 12):
+            different.append(z)
+    check("item 3: exp(log_phi(z)) equals pfair.phi(z) to 12 significant digits at -3 ... 3",
+          not different, "different at %s" % different)
+
+
+def tz10b_item_4_the_composition_at_live_scale():
+    """`log_phi((S_t - K) / sd)` with `S_t = K + z * sd`, far branch at tau = 240, live `K`, `sigma`."""
+    literals = dict(LOG_PHI_LITERALS)
+    sd = pfair.far_branch(240, S_T, K, SIGMA)[1]
+    different = []
+    for z_text in ("-10.819", "-8", "-3", "0"):
+        s_t = K + D(z_text) * sd
+        z = float((s_t - K) / sd)
+        got, want = pfair.log_phi(z), float(literals[z_text])
+        print("      z = %-8s S_t %.9f  recovered z %r  log_phi %.15g  relative %.3g" % (
+            z_text, s_t, z, got, relative(got, want)))
+        if not (math.isfinite(got) and significant(got, want, 12)):
+            different.append(z_text)
+    check("item 4: at K = 100000.25, sigma = 3.25, tau = 240 the composition is finite and "
+          "equals item 1's literal to 12 significant digits", not different,
+          "different at %s" % different)
+
+
+def tz10b_item_5_shape():
+    """Strictly increasing over -40 ... 5 and finite over -40 ... 40, at a step of 0.001."""
+    rising = [pfair.log_phi(-40 + 0.001 * i) for i in range(45001)]
+    not_rising = sum(1 for a, b in zip(rising, rising[1:]) if not a < b)
+    points = [-40 + 0.001 * i for i in range(80001)]
+    not_finite = sum(1 for z in points if not math.isfinite(pfair.log_phi(z)))
+    print("      %d points over -40 ... %g: %d steps not strictly increasing" % (
+        len(rising), -40 + 0.001 * 45000, not_rising))
+    print("      %d points over -40 ... %g: %d values not finite" % (
+        len(points), points[-1], not_finite))
+    check("item 5: strictly increasing over -40 ... 5 and finite over -40 ... 40",
+          not_rising == 0 and not_finite == 0, "%d, %d" % (not_rising, not_finite))
+
+
+def tz10b_item_6_the_pathology_removed():
+    """Defect 26 as an assertion. It goes red the day `pfair.phi` changes - correctly, because
+    that is a change to the section 1.2 link and belongs to a TZ of its own."""
+    z = -10.819
+    p = pfair.phi(z)
+    try:
+        log_of_phi_finite = math.isfinite(math.log(p))
+    except ValueError:              # `math.log(0.0)` raises rather than returning -inf
+        log_of_phi_finite = False
+    value = pfair.log_phi(z)
+    back = math.exp(value)
+    print("      phi %r  log(phi) finite %s  log_phi %.15g  exp(log_phi) %.6e" % (
+        p, log_of_phi_finite, value, back))
+    check("item 6: at z = -10.819 phi is exactly 0.0, log(phi) is not finite, log_phi is "
+          "finite and exp(log_phi) is 1.399068e-27 and positive",
+          p == 0.0 and not log_of_phi_finite and math.isfinite(value)
+          and "%.6e" % back == "1.399068e-27" and back > 0.0,
+          "phi %r, log_phi %r, exp %r" % (p, value, back))
+
+
 if __name__ == "__main__":
     for group, fns in (("V5", (v5_branches_meet_at_sixty,
                                v5_realised_path_has_zero_weight_far_out,
@@ -290,6 +417,12 @@ if __name__ == "__main__":
                                    tz07b_the_horizon_at_the_boundary,
                                    tz07b_the_scale_is_the_only_change,
                                    tz07b_more_time_is_more_dispersion)),
+                       ("TZ-10b", (tz10b_item_1_the_literals,
+                                   tz10b_item_2_the_branches_agree_at_the_crossover,
+                                   tz10b_item_3_the_identity_where_phi_is_sound,
+                                   tz10b_item_4_the_composition_at_live_scale,
+                                   tz10b_item_5_shape,
+                                   tz10b_item_6_the_pathology_removed)),
                        ("machinery", (machinery_time_weighted_mean,
                                       machinery_second_grid_and_sigma,
                                       machinery_merge_is_not_a_fill))):
@@ -301,6 +434,8 @@ if __name__ == "__main__":
     print("\nV5: %d of %d checks passed" % (COUNTS["V5"], COUNTS["V5"]))
     print("TZ-07b section 6: %d of %d checks passed"
           % (COUNTS["TZ-07b"], COUNTS["TZ-07b"]))
+    print("TZ-10b section 5.2: %d of %d checks passed"
+          % (COUNTS["TZ-10b"], COUNTS["TZ-10b"]))
     print("section 3 machinery: %d of %d checks passed"
           % (COUNTS["machinery"], COUNTS["machinery"]))
     print("%d of %d checks passed" % (total, total))
