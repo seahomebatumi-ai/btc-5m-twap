@@ -50,6 +50,38 @@ def phi(z):
     return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
 
+# ---- TZ-10b section 5.2: the tail-accurate log of Phi ------------------------------
+
+# `phi` above is `0.5 * (1 + erf)`, the sum of two doubles near 1 once `z` is far below zero:
+# it loses relative accuracy below about `z = -4.5` and returns exactly 0.0 below about
+# `z = -8.37`, which sent TZ-08a's `ll(1)` to `-inf` at `tau = 30`. A likelihood over `Phi`
+# carries a tail-accurate `log Phi` beside it (System Map section 7 item 26), and this is that
+# function. `phi` is not touched: changing it would be a change to the section 1.2 link.
+#
+# Two branches, as TZ-10b section 5.2 writes them. Above the crossover `erfc` of a positive
+# argument keeps its relative accuracy; at and below it the asymptotic series takes over,
+# truncated after `-15/z**6`. The two agree to 10 significant digits at -30, -32 and -34.
+LOG_PHI_CROSSOVER = -35
+
+
+def log_phi_erfc_branch(z):
+    """`log(0.5 * erfc(-z / sqrt(2)))`: `log Phi(z)` for `z > LOG_PHI_CROSSOVER`."""
+    return math.log(0.5 * math.erfc(-z / math.sqrt(2)))
+
+
+def log_phi_asymptotic_branch(z):
+    """The asymptotic series for `log Phi(z)`, for `z <= LOG_PHI_CROSSOVER`."""
+    return (-0.5 * z * z - 0.5 * math.log(2 * math.pi) - math.log(-z)
+            + math.log1p(-1 / z ** 2 + 3 / z ** 4 - 15 / z ** 6))
+
+
+def log_phi(z):
+    """`log Phi(z)`, finite at every finite `z`: the branch TZ-10b section 5.2 selects."""
+    if z > LOG_PHI_CROSSOVER:
+        return log_phi_erfc_branch(z)
+    return log_phi_asymptotic_branch(z)
+
+
 def far_branch(tau, s_t, k, sigma):
     """TZ-06 section 3, `tau >= 60`.
 
