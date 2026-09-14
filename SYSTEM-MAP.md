@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-13-c.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-14-a.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,7 +15,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-13-c`
+**Revision string:** `2026-09-14-a`
 
 | anchor | value |
 |---|---|
@@ -34,7 +34,8 @@ Anchors are the first 12 hex characters of the SHA-256 of the named artifact, ex
 constant multiplying `sigma * sqrt(H(tau))` moved. `9bd4213a60a3` is the value TZ-07a and TZ-07b
 were both gated against, and nothing scored under it is re-opened by this revision. **PR #9
 touched no anchor:** `pfair.py` is byte-identical on both sides of `1b8e4a7`, so TZ-08a's scores
-and every later score are gated against the same pricer.
+and every later score are gated against the same pricer. **PR #10 touched no anchor either:** it
+added one file and changed none, so `A6` is unmoved across `f781dc3`.
 
 ### Fingerprint table
 
@@ -54,6 +55,7 @@ printed here or the run is BLOCKED. `tracked` rows are reported with no expectat
 | `research/tz07a-variance-time.py` | 619 | 28,219 | frozen | `4321637751a3b847fa7e59309555b802dcc9d5ba68c7407a8ec20ab76c1b3d5e` |
 | `research/tz07b-settlement-dispersion.py` | 515 | 24,926 | frozen | `424e07344d7401f6531cf1e9aa405edd1f4f82167bfc04169cfeb49dc2a988fc` |
 | `research/tz08a-out-of-sample.py` | 745 | 38,822 | frozen | `37001deff180bf2d18df93b2b8828840ca6ce6dc8f63cd797419d6b62dd57e5c` |
+| `research/tz09-disk-inventory.py` | 894 | 41,004 | frozen | `b2dabb6a2b196b86fba10517e9767170ee9fcd1639dc1fb946d02f45c9bc49b6` |
 | `research/recorder/recorder.py` | 608 | 25,658 | frozen | `9fd1c7de0f749f8179dc092207b46528e42fd6563ce53d1c245cc74cf5439f03` |
 | `research/recorder/config.py` | 112 | 4,773 | frozen | `8111dfe473ee694fbe295cabd5fb47a8c9e56ac032ffebf42fd0167964e6181d` |
 | `research/recorder/manifest.py` | 254 | 10,002 | frozen | `79c99010a1c3e035a982a8c64dcf92afaf3ec956e3c3c4a2d354345dedb14045` |
@@ -67,8 +69,8 @@ Hashes are of the file as committed on `main` at revision date, verified by the 
 it and a new map revision. **The six recorder files are frozen because the live capture runs
 them**: an unauthorized edit is a change to a running instrument. **`pfair.py` is frozen because
 every score this project will ever quote comes out of it**, and `tz07a-variance-time.py`,
-`tz07b-settlement-dispersion.py` and `tz08a-out-of-sample.py` because a committed measurement came
-out of each. `tz06-calibration.py` is frozen at its post-PR-#9 hash: it now carries `after` and
+`tz07b-settlement-dispersion.py`, `tz08a-out-of-sample.py` and `tz09-disk-inventory.py` because a
+committed measurement came out of each. `tz06-calibration.py` is frozen at its post-PR-#9 hash: it now carries `after` and
 `need`, and at their defaults the run is the one TZ-06 ran.
 
 ---
@@ -87,13 +89,14 @@ entered git history; the pack is under 400 KB and stays that way.
 | `engine/` | live engine — **does not exist yet** |
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
-**Branches: `main`, and nothing else.** `tz-08a-out-of-sample` merged at `1b8e4a7` and was
-deleted, `tz-07b-settlement-dispersion` at `fb5c426` before it and `tz-07a-variance-time` before
+**Branches: `main`, and nothing else.** `tz-09-disk-inventory` merged at `f781dc3` and was
+deleted, `tz-08a-out-of-sample` at `1b8e4a7` before it, `tz-07b-settlement-dispersion` at `fb5c426` and `tz-07a-variance-time` before
 that; none retained anything that is not on `main`.
 The head of `main` is never a gate; commits are named where they matter.
 
 | pull request | head | disposition |
 |---|---|---|
+| PR #10 | `e45f38e` | the disk inventory instrument. **Merged 2026-09-14** into `main` at `f781dc3`, branch deleted. One file added, none changed, no anchor moved. |
 | PR #9 | `e2625ea` | the out-of-sample driver, and `after` / `need` on `scoring_set` and `build`. **Merged 2026-09-13** into `main` at `1b8e4a7`, branch deleted. 11 insertions and 3 deletions in `tz06-calibration.py`; `pfair.py` untouched on both sides. |
 | PR #8 | `26bbb61` | `SD_SCALE`, the TZ-07b instrument and 30 self-tests; `G_RATIO` and the four checks that encoded it removed. **Merged 2026-09-13** into `main` at `fb5c426`, branch deleted. `pfair.py`: `state` untouched on both branches. |
 | PR #7 | `c44af68` | `corrected_sd`, the TZ-07a instrument and 48 self-tests. **Merged 2026-09-13** into `main` at `467805e`. Purely additive to `pfair.py`: 42 insertions, no line removed or altered. |
@@ -115,8 +118,8 @@ on `main`.
 A read-only mirror of this map also sits in the Architect's project files. The repository copy is
 the authority; the mirror is never edited and never quoted as state.
 
-**Files on `main`:** fifteen TZ files (`TZ-01` … `TZ-08a`), fifteen reports, nine `research/`
-scripts, six `research/recorder/` files, two governance files, `.gitignore` — 48 paths in all.
+**Files on `main`:** sixteen TZ files (`TZ-01` … `TZ-09`), sixteen reports, ten `research/`
+scripts, six `research/recorder/` files, two governance files, `.gitignore` — 51 paths in all.
 
 ---
 
@@ -213,7 +216,10 @@ in the TZ-08a span do hold a `quotes.jsonl.gz`; not one was opened.
 | full order book per day, compressed — why it is never captured | `1,913,827,421` |
 
 The two Tier A per-interval figures differ by 23%; the larger is kept in the projection because it
-is the conservative one. Venue resolution reaches the recorder a median of `318` s after interval
+is the conservative one. **Measured against the filesystem by TZ-09 over one hour: `33,632,842`
+bytes/day on disk and `26,784,064` apparent.** The projection understates the on-disk cost by
+`9,782,381` bytes/day, because every interval directory holds eight or nine small files and the
+filesystem rounds each to 4,096-byte blocks. Venue resolution reaches the recorder a median of `318` s after interval
 close; the venue's own `closedTime` is a median of `55` s.
 
 **Feed cadence, measured TZ-06 over 400 intervals:** `chainlink` and `twap60` both publish at
@@ -249,7 +255,8 @@ projection used. The set is contiguous in wall-clock time, 2026-09-11 22:45 UTC 
 10:45 UTC: about a day and a half. **It is out of sample; it is not a second volatility regime.**
 
 **A third disjoint 400** needs `T0 > 1789296300` and, at that qualifying rate, about `36` hours of
-capture. Whether it exists is now a question about §6's disk row, not about the venue.
+capture — complete at about `T0 1789425900`, 2026-09-14 22:45 UTC. The newest interval directory at
+2026-09-14 00:03:15 UTC was `1789344000`. **§6's disk row no longer bars it.**
 
 ### 2.4 What is not in the data
 
@@ -275,6 +282,7 @@ either withdrawn labels (§2.2) or the venue's own resolutions.
 | `research/tz07a-variance-time.py` | the variance–time instrument: the fifteen-lag curve, M6's disconnect rule, the in-sample diagnostics, the `gamma.json` key read. Its `G_RATIO` cross-check is removed; its `--emit-g` path still prints a table the pricer no longer has a place for. |
 | `research/tz07b-settlement-dispersion.py` | the settlement-dispersion instrument: `Y(a, tau)` at every admissible anchor, the `Λ` table and its diagnostics, and the per-tau assert that the literal in `pfair.py` equals its own measurement to six significant digits. Imports M6's rule from `tz07a-variance-time.py` rather than reimplementing it, and opens no settled document. |
 | `research/tz08a-out-of-sample.py` | the out-of-sample driver: the set assertions, the corrected and uncorrected gate tables, the scale statistic, the observations file. **Carries no threshold of its own** — G1 and G2 come from `tz06-calibration.py`, the scale statistic from `tz07a-variance-time.py`, the dispersion from `tz07b-settlement-dispersion.py`, and G3 is judged by the Architect. |
+| `research/tz09-disk-inventory.py` | the disk inventory instrument: the `df` and `du` reads, the rate inventory, the unlinked-open enumeration, capture and log accounting, and R1's hash enumeration. **It cannot delete** — no deletion API occurs in it, and every `subprocess` call is a fixed argv of `df`, `du`, `git` or `journalctl --disk-usage`, with no shell. |
 | `research/recorder/recorder.py` | the live capture, Tier A and Tier C in one process. Read-only: no order path, no CLOB authentication, no credential, no pricing arithmetic. |
 | `research/recorder/config.py` | every constant the capture uses, each traced to the TZ that fixed it |
 | `research/recorder/manifest.py` | the per-interval manifest, a pure function of the interval directory |
@@ -283,15 +291,21 @@ either withdrawn labels (§2.2) or the venue's own resolutions.
 | `research/recorder/selftest.py` | the recorder's self-tests — 115 asserts, each aborting the run |
 
 Outputs go to `research/out/**`, git-ignored except `twap-divergence-summary.md` and
-`twap-divergence-contamination.md`. `/root/tz01-out-archive/` holds the superseded TZ-01 output.
-`/root/tz06-work/tz06-observations.csv` holds the Phase 1 per-observation rows — 2,801 lines,
-`843,788` bytes, SHA-256 `4e20c4fafbe60fe64c48ce1833a8da55f7fce2c0bad87e93b55ba95a2a4f85bb`,
-outside the repository and re-derivable from the pipeline. `/root/tz07-work/`,
-`/root/tz07b-work/` and `/root/tz08a-work/` hold TZ-07a's, TZ-07b's and TZ-08a's scratch and
-outputs, likewise outside the repository; `/root/tz08a-work/tz08a-observations.csv` is 2,801 lines,
-`1,066,357` bytes, SHA-256 `b810b07165e98b29258479323a0c634ccaea1917135a3336b8d28fb4bb92fa77`.
-**`/root/tz04a-env/` is the interpreter the running recorder executes from. It is not scratch and
-nothing may remove it.**
+`twap-divergence-contamination.md`. **`/root/tz01-out-archive/`, `/root/tz06-work/`,
+`/root/tz07-work/`, `/root/tz07b-work/` and `/root/tz08a-work/` no longer exist** — TZ-09 R4
+reclaimed all five, `163,987,456` bytes recovered. Everything a committed artifact names by hash was
+copied first into **`/root/btc-forensics/`**: 91 files, each verified equal at source and
+destination by SHA-256. The two per-observation files are there —
+`tz06-work--tz06-observations.csv`, 2,801 lines, `843,788` bytes, SHA-256
+`4e20c4fafbe60fe64c48ce1833a8da55f7fce2c0bad87e93b55ba95a2a4f85bb`, and
+`tz08a-work--tz08a-observations.csv`, 2,801 lines, `1,066,357` bytes, SHA-256
+`b810b07165e98b29258479323a0c634ccaea1917135a3336b8d28fb4bb92fa77` — both still outside the
+repository and re-derivable from the pipeline. **What was not preserved:** 23 of the 24
+`partitions/` files and all 24 `state/` files of the superseded TZ-01 output, which that report
+names only by one hash over each whole set. See §7 item 31.
+**`/root/tz04a-env/` is the interpreter the running recorder executes from, and
+`/root/btc-forensics/` is the preserved evidence TZ-09 R3 copied out before R4. Neither is scratch
+and nothing may remove either.**
 
 ---
 
@@ -331,14 +345,18 @@ nothing may remove it.**
 |---|---|---|
 | 0 | is the settlement rule what the CANON §1.1 says it is? | **CLOSED 2026-09-11 — yes. TZ-04b: 200 of 200 against a 199-of-200 gate**, reproduced by TZ-06 R-c |
 | 1 | is the corrected `p_fair` calibrated against true-rule labels? | **CLOSED 2026-09-13 — no.** TZ-06's gate could only disqualify and did not. TZ-07a's correction was mis-composed; TZ-07b measured the right variable and froze `SD_SCALE`. **TZ-08a scored it on a disjoint 400 against the gate TZ-07a §8 fixed before that set existed: G1 6 of 6, G2 0 of 39, and G3 fails at `tau` 60 and 30.** The Architect's own pre-registered prediction is refuted. `SD_SCALE` and the gate are untouched. |
-| 2 | does the **market price** deviate from `p_fair`, and by how much? | not started — the decision point, **and Phase 1's answer bars entry with this pricer.** Tier C is accumulating the input; nothing has been read, and §6's disk row now decides whether it survives. |
+| 2 | does the **market price** deviate from `p_fair`, and by how much? | not started — the decision point, **and Phase 1's answer bars entry with this pricer.** Tier C is accumulating the input; nothing has been read, and §6's disk row no longer bars it. |
 | 3 | is the deviation capturable after fee, spread, depth, 50 ms taker delay, oracle basis? | not started |
 | 4 | live, minimum size, fixed loss limit | not started |
 
 **This project has a pricer whose settlement variable is correctly identified, whose scale does not
 transfer out of sample, which is disqualified at `tau` 60 and 30, and no known edge.** Phases 0 and
-1 could only ever disqualify, and Phase 1 now has. The open model question is the **link**, not the
-constant; nothing is re-fitted, and neither `SD_SCALE` nor the §8 gate moves.
+1 could only ever disqualify, and Phase 1 now has. The open model question is **the link or
+`sigma`**: either the conditional law is heavy-tailed, or the law is Gaussian and the scale estimate
+lags the move. **The unconditional residual cannot tell them apart** — a Student's `t` is itself a
+scale mixture of normals, so a pool of correct Gaussians with a floating `sigma` reproduces V9's
+sharp centre and heavy tail exactly. TZ-10 separates them. Nothing is re-fitted, and neither
+`SD_SCALE` nor the §8 gate moves.
 
 ---
 
@@ -353,10 +371,10 @@ constant; nothing is re-fitted, and neither `SD_SCALE` nor the §8 gate moves.
 | auth | CLI subscription auth; `ANTHROPIC_API_KEY` must not be set |
 | git remote | HTTPS with the repository token embedded in the remote URL |
 | egress, **verified 2026-09-12** | DNS and TCP/443 open to `ws-live-data.polymarket.com`, `gamma-api.polymarket.com`, `clob.polymarket.com`, `ws-subscriptions-clob.polymarket.com`, `docs.polymarket.com`. Anonymous only; no credentials of any kind are held. |
-| **disk, measured 2026-09-13 17:06:04 UTC by TZ-08a** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes, free **`6,574,706,688`**. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
-| **capture cost, measured** | Tier A + Tier C `23,850,461` bytes/day. That is the recorder's own write rate, and **it is not the rate this filesystem is filling at.** |
-| **total drain, measured 2026-09-13 — the row that governs** | free fell from `7,871,356,928` bytes (the recorder's own start record, 2026-09-12 09:53:04 UTC) to `6,603,202,560` at 2026-09-13 16:17:09 — `1,268,154,368` bytes over 30.4 h, **1.00 GB/day**; and by `28,495,872` bytes over the 48.9 minutes of the TZ-08a run, **0.84 GB/day**. The capture accounts for `23,850,461` of that. **About `815,000,000` bytes/day is written by something else on this shared host and has never been identified.** Against the `2,000,000,000` byte floor that is **4.6 to 5.7 days**. |
-| **the `245 days` this row carried at revision `2026-09-13-b`** | **withdrawn.** It divided free space by one process's write rate on a host this same section calls shared. See §7 item 25. |
+| **disk, measured 2026-09-14 00:03:15 UTC by TZ-09** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes, free **`14,416,265,216`**. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
+| **capture cost, measured** | modelled Tier A + Tier C `23,850,461` bytes/day; **measured against the filesystem by TZ-09, `33,632,842` on disk and `26,784,064` apparent**. That is the recorder's own write rate, and **it is not the rate this filesystem is filling at.** |
+| **the consumer, identified — measured 2026-09-13/14 by TZ-09** | The consumer this row could not name is **`/root/PROJECT_GAMING_PS5/netaudit/telemetry/captures`**, another project on this shared host: `6,896,218,112` bytes standing at 2026-09-13 17:55:36 UTC, and `2,547,725,419` bytes/day over an `11,440` s window three hours later. **It is intermittent** — `8,214,918` bytes/day across TZ-09's quiet deciding hour against `2,547,725,419` across the active window — and the `815,000,000` bytes/day this row used to carry is a 30.4-hour average of that mixture. Our own persistent baseline is `50,352,616` bytes/day: capture `33,342,903`, journald `8,794,795`, that project idle `8,214,918`. **The Boss reports the telemetry stopped 2026-09-14; no TZ has measured the stop, and the next TZ that touches the host re-reads this row.** |
+| **headroom — a range, and never a point** | From `14,416,265,216` free to the `2,000,000,000` floor is `12,416,265,216` bytes. At our baseline `50,352,616` bytes/day that is **247 days**; if `PROJECT_GAMING_PS5`'s telemetry resumes at its measured `2,775,683,706` bytes/day it is **4.5 days**. Which end applies is decided by another project's process, not by ours. **TZ-09's own `143.87` days is not adopted**: it divides free space by a rate measured while that consumer was idle and TZ-09's own scratch was writing. The `245 days` this row carried at revision `2026-09-13-b` stays withdrawn. See §7 items 25, 29 and 30. |
 | **price to beat** | published by Gamma only after settlement, at `events[0].eventMetadata.priceToBeat`, and captured per interval in `resolution.json`. Not available before the close; a live pricer reconstructs it from the feed. |
 | **resolution endpoint** | `GET https://gamma-api.polymarket.com/markets/slug/btc-updown-5m-{T0}`, polled from `T0+333` every 15 s |
 | **CLOB websocket** | `wss://ws-subscriptions-clob.polymarket.com/ws/market` |
@@ -368,10 +386,13 @@ constant; nothing is re-fitted, and neither `SD_SCALE` nor the §8 gate moves.
 | **RTDS session limit, measured 2026-09-10** | the server closes every websocket `7,200` s after it opens, `1001 Going away`, timer restarting on each new connection. Undocumented. **No TZ may require an unbroken socket for longer than this.** |
 | clock | NTP-disciplined; SNTP replies validated at reception since `4216c04`. Maximum absolute offset measured over the TZ-05a window: `18.789` ms. An offset above 50 ms invalidates a latency claim; it is not a membership condition for anything. |
 | **sandbox limit — network** | calls that read the git token and send it to `api.github.com` are refused. `git` push/pull work. Release creation and asset upload cannot be done from inside the session — hand the upload to the Boss and verify by anonymous download. |
-| **sandbox limit — process signals** | `kill` is refused by the permission classifier, alone or inside a compound command. **Any TZ that must restart the recorder hands the Boss two exact commands** and verifies the outcome from `runtime.jsonl`, `ps` and the log rather than from his report. |
+| **sandbox limit — destructive actions** | `kill` is refused by the permission classifier, alone or inside a compound command, and TZ-09 established that `rm -rf` of several trees is refused the same way. **Any TZ that must restart the recorder or remove a tree hands the Boss one exact block** and verifies the outcome from `runtime.jsonl`, `ps`, `df` and `test -e` rather than from his report. |
 
 Not yet decided by any TZ and therefore not present: systemd units, the Parquet decision journal,
-capture retention policy, any deployment.
+any deployment. **Capture retention is fixed by TZ-09 §5:** the capture is never deleted; archiving,
+if it is ever done, is its own reversible TZ; a TZ's `/root/tz<NN>-work/` is reclaimed by the next TZ
+once that TZ's report is on `main`, except what a committed artifact names by hash, which is copied
+to `/root/btc-forensics/` first.
 
 ---
 
@@ -402,10 +423,14 @@ capture retention policy, any deployment.
 | 22 | **TZ-07b §4 justified the root mean square as the maximum-likelihood scale of a Gaussian, and the measurement it commissioned refutes the premise.** The report's own tail table shows `r` is lighter than normal at one `Λ` and heavier at three, at every tau and increasingly so as `tau` falls. The root mean square therefore overstates the calibrating scale by more where the RMS-to-robust gap is wider — which is exactly where the predicted `λ̂` sits furthest from 1. A robust constant is no answer either: it would predict 0.836 at `tau = 90` and 1.337 at 30. The open question is the residual's **shape**, and no single constant per tau addresses it. Architect's defect. | **closed by TZ-08a, and the question it raised is answered: the shape is the defect.** Out of sample the tail at `3Λ` runs 8 to 10 times the normal's below `tau = 90`, and the robust scale sits 56 to 81 per cent under the RMS. No constant per tau closes that, and G3 failed at 60 and 30. `SD_SCALE` was not touched before the test and is not touched after it. The rule stands: **a scale estimator is justified by a distributional assumption, and the report that freezes the estimator reports the check of that assumption in the same document.** |
 | 23 | **TZ-07b §2 forbade reading any outcome while §7 V4 required re-running two pipelines that read outcomes internally.** The Executor read the two sections as governing different things, carried only counts of exact matches out of the subprocesses, and disclosed the reading. Architect's defect. | closed by ruling — the Executor's reading is upheld: V4's subprocesses are exempt and no calibration statistic left them. Repaired by rule: **a scope prohibition names, in its own section, the checks that are exempt from it.** |
 | 24 | TZ-07b's V1 guard — the `bisect`ed window handed to `pfair.time_weighted_mean` — was verified on the **first member only**, 175 of 175. The members carrying a recorded disconnect are the ones a bounded slice would break on, and none was sampled. | closed by rule: **a guard on an implementation shortcut samples across the scored set and includes the pathological members by construction.** No re-run: the shortcut narrows an argument the function would otherwise have scanned to the same rows, the disconnect rule drops those anchors before the call, and V3 reproduced byte-identically over three full runs. |
-| 25 | **The Architect's §6 headroom figure was wrong by two orders of magnitude.** `245 days` divided free space by the recorder's own write rate, on a host the same section calls shared. Measured total drain is 0.84 to 1.00 GB/day and the true figure is 4.6 to 5.7 days. Architect's defect. | open until TZ-09 names the consumer in exact bytes. Repaired by rule: **a headroom figure is derived from the measured rate of change of free space over a stated wall-clock window, never from any one process's write rate.** |
+| 25 | **The Architect's §6 headroom figure was wrong by two orders of magnitude.** `245 days` divided free space by the recorder's own write rate, on a host the same section calls shared. Measured total drain is 0.84 to 1.00 GB/day and the true figure is 4.6 to 5.7 days. Architect's defect. | **closed by TZ-09 and the Architect's audit of it.** The consumer is named in §6 in exact bytes. The rule stands: **a headroom figure is derived from the measured rate of change of free space over a stated wall-clock window, never from any one process's write rate** — and §6 now carries a range rather than a point, because one window on a host with an intermittent consumer fixes neither end. |
 | 26 | **TZ-07a §8's G3 fixes a likelihood over `Phi` and no tail-accurate `log Phi`.** `pfair.phi` returns exactly `0.0` below `z ≈ −8.37`, so one saturated prediction that disagrees with its label sends `ll(1)` to `-inf`, the likelihood ratio to `inf` and its p-value to `0`. It happened at `tau = 30`, on `T0 1789268400`. Architect's defect. | closed by ruling — the Executor's reading of TZ-08a §4.5 is upheld and the run is **not** BLOCKED: the only quantity §8 bounds, `λ̂`, is unaffected past its sixth decimal (2.041843 against 2.041844 evaluated tail-accurately), and only the unthresholded quantities degenerate. Repaired by rule: **a specification that fixes a likelihood over `Phi` fixes its tail-accurate `log Phi` in the same section.** |
 | 27 | **A statistic a gate bounds was reported with no influence figure, and one observation set it.** `λ̂ = 2.0418` at `tau = 30` is carried by a single point; the other 399 prefer `λ = 1` by 14.7 log points. Neither TZ-07a §8 nor TZ-08a asked for it, so the report could not have shown it and the Architect had to derive it during the audit. Architect's defect. | open. Repaired by rule: **a fitted statistic a gate bounds is reported together with its value recomputed without its single most influential observation.** The committed report is not edited, and the gate is judged on the value §8 defines. |
 | 28 | `tz06-calibration.build`'s set-size assert message names `SET_SIZE` where the run may now pass a different `need`. Disclosed by TZ-08a §11 item 4; exact at the default, which every run to date has used. | open. Fix in the next TZ that touches that file; do not edit the committed report. |
+| 29 | **TZ-09 §3 M3's consumer rule did not exclude the measuring run's own footprint.** It named `/root` at `43,490,744` bytes/day, of which `1,490,944` of `1,843,200` — **80.9%** — is `/root/tz09-work` and `/root/.claude`, this TZ's scratch and the Executor's own session store. Strip the apparatus and the named consumer runs at about `8,300,000` bytes/day. Architect's defect. | open until a TZ re-measures the host after the telemetry stop. Repaired by rule: **a rate measurement of a shared resource subtracts the measuring run's own footprint from the quantity it attributes, and reports that footprint separately.** |
+| 30 | **TZ-09 §3 fixed a one-hour deciding window on a host whose dominant consumer is intermittent.** The designed instrument missed the thing the TZ existed to find; a read the TZ did not ask for found it three hours later at `2,547,725,419` bytes/day. Architect's defect. | open until §6's range is collapsed by measurement. The Executor was right not to re-choose the window after seeing data, which would have been reinterpreting §3. Repaired by rule: **a window that must characterise an intermittent consumer is at least as long as that consumer's measured idle-to-active period, or the TZ states in its own §3 that its figure is a lower bound.** |
+| 31 | **TZ-09 §5.3 defined preservation by "the SHA-256 a committed artifact names" and said nothing about a hash taken over several files.** `CryptoReports/TZ-01-…-report.md` §2 gives one SHA-256 over all of `partitions/` and one over all of `state/`; neither is any single file's hash, so R2 as written deleted 23 partition files and 24 state files, and those two rows can no longer be verified from disk. The Executor extended the rule to save an abbreviated-hash file and applied it literally here, disclosing both. Architect's defect. | closed by ruling — the Executor's reading is upheld, and the material loss is near zero: TZ-01's results are withdrawn under §2.2 and its dataset is superseded by the `tz-01a-dataset` Release asset. Repaired by rule: **a preservation rule states what an aggregate hash over several files names; where it names nothing, deleting any member is authorized only by a TZ that says so in exact counts.** |
+| 32 | **TZ-09 §7 V2 proved the instrument cannot delete by grepping Python deletion APIs, and the instrument imports `subprocess`.** The check as specified could not have caught `subprocess.run(["rm", …])`; the Architect had to re-derive the proof during the audit by enumerating all four call sites. It holds — every argv is a fixed `df`, `du`, `git` or `journalctl --disk-usage`, with no shell — but the instrument did not establish it. Architect's defect, the same class as item 9. | closed by rule: **a proof that code cannot perform an action enumerates its delegation paths — `subprocess`, `shell=True`, external binaries — as well as the in-language APIs.** The committed report is not edited. |
 | 21 | The TZ-07a report's §2.5 summary carries one `eligible bins` column for two estimators whose eligibility differs — 10 / 9 / 6 / 5 / 2 / 2 uncorrected against 8 / 10 / 9 / 7 / 3 / 2 corrected. The per-tau tables are correct; only the summary is ambiguous, and G2 counts failures over eligible bins. | closed by rule: **a summary table reporting two estimators reports eligibility per estimator.** The committed report is not edited. |
 
 ---
@@ -418,8 +443,13 @@ this repository can place an order. The recorder reads; it cannot write to any v
 
 The pricer exists and has now been scored twice, against 800 labels the venue itself produced, on
 two disjoint sets. It discriminates, and its shape passes; its scale does not transfer, and it is
-disqualified at `tau` 60 and 30. The recorder is running on `4216c04` with both tiers, on a
-filesystem **4.6 to 5.7 days from its floor with an unidentified consumer**. Between them they have
-produced three conclusions — the Phase 0 answer, the Phase 1 answer and the reason for it — one
-deployment proof, three measurements of the feed's own dispersion, and one written prediction that
-the data refuted.
+disqualified at `tau` 60 and 30. **Why it is disqualified is now the only open model question, and
+it has two candidate answers that the data so far cannot separate** — a heavy-tailed link, or a
+Gaussian link divided by a `sigma` estimate that lags the move.
+
+The recorder is running on `4216c04` with both tiers. The filesystem is no longer the binding
+constraint: `14,416,265,216` bytes free, the consumer that was eating it identified and reported
+stopped, and headroom between **4.5 and 247 days** depending on whether it resumes. Between them the
+pricer and the recorder have produced three conclusions — the Phase 0 answer, the Phase 1 answer and
+the reason for it — one deployment proof, three measurements of the feed's own dispersion, one
+measurement of the host, and one written prediction that the data refuted.
