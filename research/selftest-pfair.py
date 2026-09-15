@@ -23,6 +23,14 @@ The `tz10b_*` items are TZ-10b section 5.2's six self-tests of `log_phi`, the ta
 numbers moves. The references are 60-digit literals everywhere except `-3 ... 3`, the only
 range in which `pfair.phi` keeps 12 significant digits and so the only range it is compared in.
 
+The `tz11a_*` items are TZ-11a section 5.2's six self-tests of the Student link: `log_t_cdf`
+against 40 literals computed at 60 digits by routes independent of the continued fraction under
+test, its symmetry, its normal limit, its shape, the pathology removed at live scale, and the
+three measured tables. They are counted on their own, so none of the 110 above moves. No
+expectation here depends on a value TZ-11a measures: item 5 compares against literals with `nu`
+written in the call, and checks the pricer's own function by an inequality that holds for every
+`nu` the fit can return.
+
 Run:  python3 -B selftest-pfair.py
 """
 
@@ -38,6 +46,7 @@ from pfair import D                                                        # noq
 
 COUNTS = {"V5": 0, "machinery": 0, "TZ-07b": 0}
 COUNTS["TZ-10b"] = 0
+COUNTS["TZ-11a"] = 0
 GROUP = "V5"
 
 # Live scale, from the capture: BTC near 100,000 USD and a per-second realised volatility of a
@@ -408,6 +417,167 @@ def tz10b_item_6_the_pathology_removed():
           "phi %r, log_phi %r, exp %r" % (p, value, back))
 
 
+# ---- TZ-11a section 5.2: the Student link -----------------------------------------
+
+# Item 1's reference: `log F_nu(z)`, computed by the Architect at 60 decimal digits by the
+# regularized incomplete beta `I_x(nu/2, 1/2) / 2` and cross-checked at 60 digits by quadrature
+# of the density; neither route is the continued fraction `pfair._betacf` implements. The worst
+# disagreement across the 40 is the accuracy of the printed literals themselves, `3.97e-15`
+# relative, against the item's `1e-12`.
+LOG_T_CDF_ZS = ("0", "-1", "-3", "-5", "-8", "-10.819", "-20", "-50")
+LOG_T_CDF_LITERALS = (
+    ("2", ("-0.693147180559945", "-1.55435868307644", "-3.04213264974235",
+           "-3.96992886866936", "-4.87513859809586", "-5.46847054829007",
+           "-6.68835316116258", "-8.51779297152817")),
+    ("2.5", ("-0.693147180559945", "-1.59933653536950", "-3.31626685434013",
+             "-4.44598122091119", "-5.56532867478168", "-6.30324233817012",
+             "-7.82481099775613", "-10.1104508277657")),
+    ("3", ("-0.693147180559945", "-1.63218922449412", "-3.54618467545091",
+           "-4.86702610492042", "-6.19564464966101", "-7.07657843379202",
+           "-8.89844171394626", "-11.6397847632440")),
+    ("4", ("-0.693147180559945", "-1.67691149318135", "-3.91347485706189",
+           "-5.58727573561669", "-7.32032286818778", "-8.48264615644609",
+           "-10.9009041296344", "-14.5521443574038")),
+    ("7", ("-0.693147180559945", "-1.74120896160071", "-4.60806807421352",
+           "-7.15283904545879", "-9.99615988572270", "-11.9667403968485",
+           "-16.1409126343562", "-22.5096639254306")))
+
+# Items 1 and 2: "to 12 significant digits" and the item's stated tolerance, `1e-12` relative.
+# Both readings are asserted, and the relative figure is printed beside every comparison.
+TZ11A_RELATIVE = 1e-12
+
+# Item 3: the bound, and the gap the Architect computed at 60 digits, printed beside it.
+NORMAL_LIMIT_NU = 1e6
+NORMAL_LIMIT_BOUND = 1e-4
+NORMAL_LIMIT_EXPECTED = "2.46e-5"
+
+# Item 5a's two literals, from item 1's reference at `nu = 3` and `z = -10.819`.
+F3_AT_MINUS_10_819 = "8.4465826393e-04"
+LOG_F3_AT_MINUS_10_819 = "-7.07657843379202"
+
+
+def tz11a_item_1_the_literals():
+    """`log_t_cdf` equals each of the 40 literals to 12 significant digits and within 1e-12."""
+    different, worst = [], 0.0
+    for nu_text, row in LOG_T_CDF_LITERALS:
+        for z_text, want_text in zip(LOG_T_CDF_ZS, row):
+            got, want = pfair.log_t_cdf(float(z_text), float(nu_text)), float(want_text)
+            gap = relative(got, want)
+            worst = max(worst, gap)
+            print("      nu = %-4s z = %-8s log_t_cdf %.15g  literal %s  relative %.3g" % (
+                nu_text, z_text, got, want_text, gap))
+            if not (significant(got, want, 12) and gap < TZ11A_RELATIVE):
+                different.append((nu_text, z_text))
+    print("      worst relative difference over the 40: %.3g" % worst)
+    check("item 1: log_t_cdf equals all 40 literals to 12 significant digits and within 1e-12 "
+          "relative", not different, "different at %s" % different)
+
+
+def tz11a_item_2_symmetry():
+    """`F(z) + F(-z) == 1` at 15 pairs: the positive branch and the symmetry branch of `I_x`."""
+    different, worst = [], 0.0
+    for nu in (2.5, 3.0, 7.0):
+        for z in (0.5, 1.0, 2.0, 3.0, 5.0):
+            total = math.exp(pfair.log_t_cdf(z, nu)) + math.exp(pfair.log_t_cdf(-z, nu))
+            worst = max(worst, abs(total - 1.0))
+            if not (significant(total, 1.0, 12) and abs(total - 1.0) < TZ11A_RELATIVE):
+                different.append((nu, z))
+    print("      15 pairs, worst |F(z) + F(-z) - 1| %.3g" % worst)
+    check("item 2: exp(log_t_cdf(z)) + exp(log_t_cdf(-z)) equals 1 to 12 significant digits at "
+          "15 pairs", not different, "different at %s" % different)
+
+
+def tz11a_item_3_the_normal_limit():
+    """`t_cdf(z, 1e6)` against `pfair.phi(z)` at the integers -3 ... 3, where `phi` is sound."""
+    worst = 0.0
+    for z in range(-3, 4):
+        got, want = pfair.t_cdf(float(z), NORMAL_LIMIT_NU), pfair.phi(float(z))
+        worst = max(worst, relative(got, want))
+        print("      z = %d  t_cdf(z, 1e6) %.15g  phi %.15g  relative %.3g" % (
+            z, got, want, relative(got, want)))
+    print("      worst relative gap %.3g, expected %s, bound %g" % (
+        worst, NORMAL_LIMIT_EXPECTED, NORMAL_LIMIT_BOUND))
+    check("item 3: the worst relative gap between t_cdf(z, 1e6) and phi(z) over -3 ... 3 is "
+          "below 1e-4", worst < NORMAL_LIMIT_BOUND, "%.3g" % worst)
+
+
+def tz11a_item_4_shape():
+    """Strictly increasing over -60 ... 5 at 65,001 points and finite over -200 ... 200 at
+    40,001 points, at each of `nu` 2.05, 3 and 60 separately."""
+    failures = []
+    for nu in (2.05, 3.0, 60.0):
+        rising = [pfair.log_t_cdf(-60 + 0.001 * i, nu) for i in range(65001)]
+        not_rising = sum(1 for a, b in zip(rising, rising[1:]) if not a < b)
+        points = [-200 + 0.01 * i for i in range(40001)]
+        not_finite = sum(1 for z in points if not math.isfinite(pfair.log_t_cdf(z, nu)))
+        print("      nu = %g: %d points over -60 ... 5, %d steps not strictly increasing; "
+              "%d points over -200 ... 200, %d values not finite" % (
+                  nu, len(rising), not_rising, len(points), not_finite))
+        if not_rising or not_finite:
+            failures.append((nu, not_rising, not_finite))
+    check("item 4: log_t_cdf is strictly increasing over -60 ... 5 and finite over -200 ... 200 "
+          "at nu = 2.05, 3 and 60", not failures, str(failures))
+
+
+def tz11a_item_5_the_pathology_removed():
+    """Defect 26 at live scale, against literals and against the pricer's own function.
+
+    `sd` is the committed `corrected_sd`, not `student_sd`, so `z` is fixed at -10.819 whatever
+    `LINK_SCALE[30]` is, and only `nu` moves the Student value.
+    """
+    sd = pfair.corrected_sd(30, SIGMA)
+    s_t = K + D("-10.819") * sd
+    state, _ = pfair.state_and_sd(30, s_t, K, SIGMA, s_t)
+    z = float(state / sd)
+    p = pfair.p_fair(state, sd)
+    try:
+        log_of_p_finite = math.isfinite(math.log(p))
+    except ValueError:              # `math.log(0.0)` raises rather than returning -inf
+        log_of_p_finite = False
+    f3, log_f3 = pfair.t_cdf(z, 3.0), pfair.log_t_cdf(z, 3.0)
+    print("      z %r  p_fair %r  log(p_fair) finite %s" % (z, p, log_of_p_finite))
+    print("      5a: t_cdf(z, 3.0) %.10e  literal %s  relative %.3g" % (
+        f3, F3_AT_MINUS_10_819, relative(f3, float(F3_AT_MINUS_10_819))))
+    print("      5a: log_t_cdf(z, 3.0) %.15g  literal %s  relative %.3g" % (
+        log_f3, LOG_F3_AT_MINUS_10_819, relative(log_f3, float(LOG_F3_AT_MINUS_10_819))))
+    assert (z == -10.819 and p == 0.0 and not log_of_p_finite
+            and significant(f3, float(F3_AT_MINUS_10_819), 10)
+            and significant(log_f3, float(LOG_F3_AT_MINUS_10_819), 12)), \
+        "FAILED: item 5a: z %r, p_fair %r, t_cdf %r, log_t_cdf %r" % (z, p, f3, log_f3)
+    nu = float(pfair.LINK_NU[30])
+    p_t = pfair.p_fair_student(state, sd, 30)
+    log_p_t = pfair.log_t_cdf(z, nu)
+    print("      5b: LINK_NU[30] %s  p_fair_student %.10e  log_t_cdf(z, LINK_NU[30]) %.15g" % (
+        pfair.LINK_NU[30], p_t, log_p_t))
+    check("item 5: 5a - phi is 0.0 and its log not finite, F_3 and log F_3 equal the literals; "
+          "5b - 0 < p_fair_student < 1e-2 and log_t_cdf at LINK_NU[30] is finite and inside "
+          "(-40, -5)",
+          0.0 < p_t < 1e-2 and math.isfinite(log_p_t) and -40.0 < log_p_t < -5.0,
+          "p_t %r, log %r" % (p_t, log_p_t))
+
+
+def tz11a_item_6_the_tables():
+    """The three tables cover exactly the taus the pricer serves; an unmeasured tau is refused;
+    `student_sd` is its own table times `sigma * sqrt(H)` - an identity carrying no value."""
+    keys = [sorted(table) for table in (pfair.ADMIT, pfair.LINK_NU, pfair.LINK_SCALE)]
+    refused = []
+    for name, call in (("student_sd", lambda: pfair.student_sd(100, SIGMA)),
+                       ("p_fair_student", lambda: pfair.p_fair_student(D(1), D(1), 100))):
+        try:
+            call()
+        except AssertionError:
+            refused.append(name)
+    got = pfair.student_sd(30, D("3.25"))
+    want = pfair.LINK_SCALE[30] * D("3.25") * (D(30) ** 3 / D(10800)).sqrt()
+    print("      keys %s  refused at tau = 100: %s  student_sd(30, 3.25) %s" % (
+        keys[0], refused, got))
+    check("item 6: ADMIT, LINK_NU and LINK_SCALE are keyed by exactly pfair.TAUS; student_sd and "
+          "p_fair_student raise at tau = 100; student_sd(30, 3.25) is its own table's identity",
+          all(k == sorted(pfair.TAUS) for k in keys)
+          and refused == ["student_sd", "p_fair_student"] and got == want,
+          "keys %s, refused %s, %s != %s" % (keys, refused, got, want))
+
+
 if __name__ == "__main__":
     for group, fns in (("V5", (v5_branches_meet_at_sixty,
                                v5_realised_path_has_zero_weight_far_out,
@@ -423,6 +593,12 @@ if __name__ == "__main__":
                                    tz10b_item_4_the_composition_at_live_scale,
                                    tz10b_item_5_shape,
                                    tz10b_item_6_the_pathology_removed)),
+                       ("TZ-11a", (tz11a_item_1_the_literals,
+                                   tz11a_item_2_symmetry,
+                                   tz11a_item_3_the_normal_limit,
+                                   tz11a_item_4_shape,
+                                   tz11a_item_5_the_pathology_removed,
+                                   tz11a_item_6_the_tables)),
                        ("machinery", (machinery_time_weighted_mean,
                                       machinery_second_grid_and_sigma,
                                       machinery_merge_is_not_a_fill))):
@@ -436,6 +612,8 @@ if __name__ == "__main__":
           % (COUNTS["TZ-07b"], COUNTS["TZ-07b"]))
     print("TZ-10b section 5.2: %d of %d checks passed"
           % (COUNTS["TZ-10b"], COUNTS["TZ-10b"]))
+    print("TZ-11a section 5.2: %d of %d checks passed"
+          % (COUNTS["TZ-11a"], COUNTS["TZ-11a"]))
     print("section 3 machinery: %d of %d checks passed"
           % (COUNTS["machinery"], COUNTS["machinery"]))
     print("%d of %d checks passed" % (total, total))

@@ -82,6 +82,134 @@ def log_phi(z):
     return log_phi_asymptotic_branch(z)
 
 
+# ---- TZ-11a section 5.1: the Student link, and the domain it is priced on -------------
+
+# `Phi` is not the law of the settlement residual (TZ-10b), and a Student's `t` with a measured
+# `nu(tau)` is the replacement TZ-11a scores. Its CDF is the regularized incomplete beta,
+# `F_nu(z) = I_x(nu/2, 1/2) / 2` with `x = nu / (nu + z*z)` for `z <= 0`, and the leading factor
+# of `I_x` is taken in logs: `log_betainc_reg` never forms a probability it then has to take
+# the log of, so the far tail stays finite where `phi` returns exactly 0.0. `phi`, `log_phi` and
+# `p_fair` are not touched - they are the old link, and every committed score is quoted from
+# them.
+LOG_BETA_CF_MAX = 300          # continued-fraction iterations before raising
+LOG_BETA_TOL = 1e-16           # its relative convergence tolerance
+
+
+def log_beta(a, b):
+    """`log B(a, b) = lgamma(a) + lgamma(b) - lgamma(a + b)`."""
+    return math.lgamma(a) + math.lgamma(b) - math.lgamma(a + b)
+
+
+def _betacf(a, b, x):
+    """The continued fraction for `I_x(a, b)`, by the modified Lentz method.
+
+    Raises rather than returning an unconverged value when `LOG_BETA_CF_MAX` iterations do not
+    bring a step within `LOG_BETA_TOL` of one.
+    """
+    tiny = 1e-300
+    qab, qap, qam = a + b, a + 1.0, a - 1.0
+    c = 1.0
+    d = 1.0 - qab * x / qap
+    if abs(d) < tiny:
+        d = tiny
+    d = 1.0 / d
+    h = d
+    for m in range(1, LOG_BETA_CF_MAX + 1):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1.0 + aa * d
+        if abs(d) < tiny:
+            d = tiny
+        c = 1.0 + aa / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1.0 + aa * d
+        if abs(d) < tiny:
+            d = tiny
+        c = 1.0 + aa / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < LOG_BETA_TOL:
+            return h
+    raise ArithmeticError("the continued fraction for I_x(%r, %r) at x = %r did not converge "
+                          "in %d iterations" % (a, b, x, LOG_BETA_CF_MAX))
+
+
+def log_betainc_reg(a, b, x):
+    """`log I_x(a, b)`, the log of the regularized incomplete beta function.
+
+    Below the mean-like split `(a + 1) / (a + b + 2)` the continued fraction converges fast and
+    is used directly; above it the symmetry `I_x(a, b) = 1 - I_{1-x}(b, a)` is taken.
+    """
+    if x >= 1:
+        return 0.0
+    if x <= 0:
+        raise ValueError("log I_x(a, b) needs x > 0, got %r" % (x,))
+    if x < (a + 1) / (a + b + 2):
+        return (a * math.log(x) + b * math.log1p(-x) - math.log(a) - log_beta(a, b)
+                + math.log(_betacf(a, b, x)))
+    return math.log1p(-math.exp(log_betainc_reg(b, a, 1 - x)))
+
+
+def log_t_cdf(z, nu):
+    """`log F_nu(z)`, the log CDF of Student's `t` with `nu` degrees of freedom."""
+    if z <= 0:
+        return log_betainc_reg(nu / 2, 0.5, nu / (nu + z * z)) - math.log(2)
+    return math.log1p(-math.exp(log_t_cdf(-z, nu)))
+
+
+def t_cdf(z, nu):
+    """`F_nu(z)`."""
+    return math.exp(log_t_cdf(z, nu))
+
+
+# TZ-11a sections 3.1 and 3.2, measured on the TZ-06 400 alone and on nothing else, from the
+# feed and the manifests - no label was read to produce any of them. `ADMIT[tau]` is the 30th
+# percentile of `sigma_hat` over those 400 at that tau: the Student pricer quotes only where the
+# causal `sigma_hat` is at or above it. `LINK_NU` and `LINK_SCALE` are the maximum-likelihood
+# `nu` and `s` of a symmetric Student's `t` fitted to `r = Y / (sigma * sqrt(H(tau)))` over
+# every admissible anchor of the admissible members. Six significant digits each.
+#
+# These are **literals, not a fit performed at run time**, for the reason `SD_SCALE` is: a pricer
+# that re-derives its constants from the data it is pointed at cannot be tested out of sample.
+# The keys are every tau the pricer serves, `10` included, and an unmeasured tau raises.
+ADMIT = {240: D("2.12324"), 180: D("2.14298"), 120: D("2.18062"), 90: D("2.16098"),
+         60: D("2.16725"), 30: D("2.15178"), 10: D("2.14530")}
+LINK_NU = {240: D("9.62070"), 180: D("13.7083"), 120: D("20.2258"), 90: D("16.0482"),
+           60: D("9.51490"), 30: D("4.79579"), 10: D("2.13489")}
+LINK_SCALE = {240: D("1.30678"), 180: D("1.36658"), 120: D("1.40748"), 90: D("1.37085"),
+              60: D("1.27997"), 30: D("1.08185"), 10: D("0.643873")}
+
+
+def student_sd(tau, sigma):
+    """TZ-11a section 3.4's `sd_t`: the same horizon, at the scale of the fitted Student law.
+
+        sd_t = LINK_SCALE[tau] * sigma * sqrt(H(tau)),   H as `corrected_sd` has it
+
+    `sigma` is `realised_sigma` over the causal window, exactly as `corrected_sd` receives it.
+    """
+    assert tau in LINK_SCALE, "tau = %s has no measured Student scale; TZ-11a measured %s" % (
+        tau, sorted(LINK_SCALE))
+    if tau < SETTLEMENT_S:
+        h = D(tau) ** 3 / D(TAU_CUBED_DIVISOR)
+    else:
+        h = D(tau - 40)
+    return LINK_SCALE[tau] * sigma * h.sqrt()
+
+
+def p_fair_student(state, sd, tau):
+    """`F_nu(state / sd)` at `nu = LINK_NU[tau]`. The division is the last Decimal operation."""
+    assert tau in LINK_NU, "tau = %s has no measured degrees of freedom; TZ-11a measured %s" % (
+        tau, sorted(LINK_NU))
+    return t_cdf(float(state / sd), float(LINK_NU[tau]))
+
+
 def far_branch(tau, s_t, k, sigma):
     """TZ-06 section 3, `tau >= 60`.
 

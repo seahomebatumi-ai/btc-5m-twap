@@ -267,10 +267,14 @@ def corrected_observations(t0, s1, s3, taus=pfair.GATED_TAUS):
 
 # ---- M3, in-sample diagnostics ----------------------------------------------------
 
-def log_likelihood(pairs, lam):
+def log_likelihood(pairs, lam, log_cdf=None):
     """`sum( y log Phi(z/lam) + (1-y) log(1 - Phi(z/lam)) )`, section 8 G3."""
     total = 0.0
     for z, y in pairs:
+        if log_cdf is not None:
+            u = z / lam
+            total += log_cdf(u) if y else log_cdf(-u)
+            continue
         p = pfair.phi(z / lam)
         q = p if y else 1.0 - p
         if q <= 0.0:
@@ -279,7 +283,7 @@ def log_likelihood(pairs, lam):
     return total
 
 
-def lambda_hat(pairs):
+def lambda_hat(pairs, log_cdf=None):
     """Section 8 G3's `lambda-hat`: ternary search over [0.5, 3.0] to 1e-9.
 
     Reported here as a section 5 diagnostic with no threshold. The same definition is the one
@@ -289,12 +293,12 @@ def lambda_hat(pairs):
     while hi - lo > LAMBDA_TOL:
         a = lo + (hi - lo) / 3.0
         b = hi - (hi - lo) / 3.0
-        if log_likelihood(pairs, a) < log_likelihood(pairs, b):
+        if log_likelihood(pairs, a, log_cdf) < log_likelihood(pairs, b, log_cdf):
             lo = a
         else:
             hi = b
     lam = (lo + hi) / 2.0
-    ll_hat, ll_one = log_likelihood(pairs, lam), log_likelihood(pairs, 1.0)
+    ll_hat, ll_one = log_likelihood(pairs, lam, log_cdf), log_likelihood(pairs, 1.0, log_cdf)
     ratio = 2.0 * (ll_hat - ll_one)
     return {"lambda_hat": lam, "ll_at_lambda_hat": ll_hat, "ll_at_one": ll_one,
             "likelihood_ratio": ratio,
