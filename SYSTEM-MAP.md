@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-18-a.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-18-b.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,7 +15,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-18-a`
+**Revision string:** `2026-09-18-b`
 
 | anchor | value |
 |---|---|
@@ -100,16 +100,18 @@ and `tz13-sized-gate-test3.py` are frozen because a committed measurement came o
 `tz12-sized-gate.py` that is `SIGMA_LOG_NU`, the member-bootstrap spread of `log ν̂`, and the sized
 gate; for `tz13-sized-gate-test3.py`, the first verdict under it. `tz06-calibration.py` is frozen at
 its post-PR-#9 hash: it carries `after` and `need`, and at their defaults the run is the one TZ-06
-ran. **The twenty-two rows carried from revision `2026-09-17-a` were verified by the Architect on
-2026-09-17 from `origin/main` at `44d77008a7cf5625c0c19b2e02250e18a8bed51c`**, the merge of PR #13,
-through `git show origin/main:<path>`. Since then `main` has taken the upload of that revision with
-TZ-13 at `2c7694a9`, the TZ-13 report, and PR #14, which adds one path and changes none. The TZ-13
-Executor hashed all nineteen `frozen` rows from `origin/main` at `2c7694a9` and again during its run,
-19 of 19 equal, and its `SYSTEM-MAP.md` read — `2026-09-17-a`, 695 lines, 113,563 bytes,
-`1a15ad90b7ea` — equals the Architect's mirror. **The `tz13-sized-gate-test3.py` row is that report's
-branch figure and was not re-hashed by the Architect: no byte-level read of `origin/main` was
-available to this revision.** It is the first row TZ-14's fingerprint gate reads, and a mismatch there
-is BLOCKED like any other.
+ran. **Every one of the twenty-two rows above was read byte for byte by the Architect from `origin/main`
+at `dad557d56f478d0bf6ec9e9b814030291b3f399c` on 2026-09-18**, by cloning the public repository and
+hashing each path: 22 of 22 equal to the values printed here, lines and bytes included. That closes
+the caveat revision `2026-09-18-a` carried — **the `tz13-sized-gate-test3.py` row is no longer a
+report's branch figure**; it is `a67b00c95974…`, read from `main` after the merge of PR #14, and the
+row is now evidence of the same kind as the other nineteen. The TZ-13 Executor had hashed nineteen
+`frozen` rows from `origin/main` at `2c7694a9` and again during its run, 19 of 19 equal.
+
+**Revision `2026-09-18-a` reached `main` at `dad557d5` and is confirmed there**, as §7 item 18's rule
+requires of every upload: 688 lines, 121,828 bytes, SHA-256
+`0e98f07d30f60a7e0ab00592b7fd180c0496eefa8ba6adc7447392e1c26dfd17`, byte-identical to the Architect's
+mirror. This revision replaces it and ships with TZ-14 in one upload.
 
 ---
 
@@ -127,21 +129,22 @@ entered git history; the pack is under 400 KB and stays that way.
 | `engine/` | live engine — **does not exist yet** |
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
-**Branches on `origin` were not re-read at this revision:** no `git ls-remote` was available to the
-Architect. That departs from §7 item 55's rule; it is disclosed here and discharged by TZ-14's §0,
-which reads every ref and reports it. Last read, on 2026-09-17: `main` at `44d77008` and
-`tz-12-sized-gate` at `6dc0e24`. Since then TZ-13 pushed one branch, `tz-13-sized-gate-test3` at
-`7ef9723`, and **the Boss reported PR #14 merged on 2026-09-18; the merge commit is not named here
-because it was not read** — TZ-14 reads it. `tz-11a-student-link` and `tz-09-disk-inventory` left
-`origin` between 2026-09-15 and 2026-09-17 (§7 item 55); both commits are reachable from `main`, and
-GitHub serves them as `refs/pull/12/head` = `2746518` and `refs/pull/10/head` = `e45f38e`, alongside
-`refs/pull/13/head` = `6dc0e24` and `refs/pull/5/head` = `4216c04`, the commit the capture runs. The
-tag `refs/tags/tz-01a-dataset` is an annotated object `d3251aa` peeling to `ea9290b`. No `tz-11`
-branch exists anywhere. The head of `main` is never a gate; commits are named where they matter.
+**Branches on `origin`, read with `git ls-remote` on 2026-09-18 as §7 item 55 requires.** `origin`
+carries **one branch and no other**: `refs/heads/main` at `dad557d56f478d0bf6ec9e9b814030291b3f399c`,
+equal to `HEAD`. `tz-13-sized-gate-test3` and `tz-12-sized-gate` are both gone — the first deleted
+after PR #14 was merged, the second after PR #13 — joining `tz-11a-student-link` and
+`tz-09-disk-inventory`, which left between 2026-09-15 and 2026-09-17. **Every commit any artifact
+names is still served**, as `refs/pull/NN/head`: `14` = `7ef9723`, `13` = `6dc0e24`, `12` = `2746518`,
+`11` = `d34606e`, `10` = `e45f38e`, `9` = `e2625ea`, `8` = `26bbb61`, `7` = `c44af68`, `6` = `5ed667a`,
+`5` = `4216c04` — the commit the capture runs — `4` = `0e13a5c`, `3` = `ee2f632`, `2` = `3895356` and
+`1` = `d9e58e8`. The tag `refs/tags/tz-01a-dataset` is an annotated object `d3251aa` peeling to
+`ea9290b`. No `tz-11` and no `tz-14` branch exists anywhere. **PR #14's merge commit is
+`7ba5df1945131168db5b1438a9ed2ad087ff6acb`**, 2026-09-18 09:26:41 UTC, parents `8032bcd` — the TZ-13
+report — and `7ef9723`. The head of `main` is never a gate; commits are named where they matter.
 
 | pull request | head | disposition |
 |---|---|---|
-| PR #14 | `7ef9723` | the sized gate applied once to test 3: the set, the guarded walk, label-free constants written to disk before any outcome, the once-only outcome read, the per-`tau` verdict, the power projection and six self-tests. **Reported merged by the Boss on 2026-09-18**; the merge commit is read by TZ-14. One file added, 1,074 lines, none changed, no anchor moved. |
+| PR #14 | `7ef9723` | the sized gate applied once to test 3: the set, the guarded walk, label-free constants written to disk before any outcome, the once-only outcome read, the per-`tau` verdict, the power projection and six self-tests. **Merged 2026-09-18** into `main` at `7ba5df1`, branch deleted. One file added, 1,074 lines, none changed, no anchor moved. |
 | PR #13 | `6dc0e24` | the sized gate: `SIGMA_LOG_NU` and `SIGMA_LOG_NU_CENSORED`, the error rates of every TZ-11a gate, §4's constants per population, six self-tests and the TZ-13 instrument. **Merged 2026-09-17** into `main` at `44d77008`. One file added, none changed, no anchor moved. It reads no label and computes no observed statistic. |
 | PR #12 | `2746518` | the Student link — `log_t_cdf`, `t_cdf`, `student_sd`, `p_fair_student` and the three tables `ADMIT`, `LINK_NU`, `LINK_SCALE` — its six self-tests, `log_cdf=None` on `tz07a.log_likelihood` and `tz07a.lambda_hat`, and the TZ-11a instrument. **Merged 2026-09-15** into `main` at `3452fb8`. Four files: `pfair.py` +128 −0, `selftest-pfair.py` +178 −0, `tz07a-variance-time.py` +8 −4 — exactly the four lines TZ-11a §5.3 names — and 1,231 new. `A6` moved; the ten `pfair.py` objects TZ-11a V6 names are byte-identical across it. |
 | PR #11 | `d34606e` | the tail-accurate `log Phi`, its six self-tests and the TZ-10b instrument. **Merged 2026-09-14** into `main`. Three files, **insertions only**: 32 into `pfair.py`, 135 into `selftest-pfair.py`, 1,224 new. `A6` moved; `SD_SCALE`, `corrected_sd`, `phi` and `state` byte-identical across it. The merge commit is not named: no report states it and no gate reads it. |
@@ -164,7 +167,9 @@ on `main`; `d34606e` — the commit `log_phi` and the TZ-10b instrument come fro
 scored from; `3452fb8` — the merge that put it on `main`; `6dc0e24` — the commit TZ-12 built and
 both of its full runs are of; `44d77008` — the merge that put it on `main`, and the state the carried
 rows of §0 were verified against; `2c7694a9` — the upload of revision `2026-09-17-a` and TZ-13, the
-merge base TZ-13 built on; `7ef9723` — the commit TZ-13 built and both of its full runs are of.
+merge base TZ-13 built on; `7ef9723` — the commit TZ-13 built and both of its full runs are of; `7ba5df1` — the merge that put
+it on `main`; `dad557d` — the upload of revision `2026-09-18-a`, and the state every row of §0 was
+read at.
 
 **Tag:** `tz-01a-dataset` → `ea9290b92b9fa50c22d0560d5d01dfa392af44df`.
 
@@ -173,8 +178,8 @@ the authority; the mirror is never edited and never quoted as state.
 
 **Files on `main`:** twenty-three TZ files (`TZ-01` … `TZ-13`), twenty-three reports, fourteen
 `research/` scripts, six `research/recorder/` files, two governance files, `.gitignore` — **69
-paths**: the 66 counted by the Architect on `origin/main` at `44d77008` with `git ls-tree -r`, plus
-TZ-13's specification, report and instrument; not re-counted at this revision. **Three of the
+paths**, counted by the Architect with `git ls-tree -r --name-only` on `origin/main` at `dad557d5`:
+23 under `CryptoReports/`, 23 under `CryptoTZ/`, 20 under `research/` and 3 at the root. **Three of the
 twenty-three reports are BLOCKED reports and each added
 nothing else:** TZ-10 at `1fcd19f`, TZ-10a at `d015d3c` and TZ-11 at `0b080c1`, one file per
 commit. No branch and no pull request exists for any of them, and no `research/` file moved for
@@ -541,7 +546,21 @@ between the market and `p_t` there is not, by itself, the market's error. And th
 CANON PART II: a threshold fixed before any quote is aggregated, and a false-failure probability and a
 power stated before any outcome the gate judges is read.
 
-**TZ-14 is next:** Phase 2's first reading of the Tier C quotes, at the five admitted `tau`.
+**Phase 2 is two TZs, and this is the Architect's decision.** A gate needs a threshold and a
+sampling rule fixed before any score, and CANON PART II now also requires a false-failure probability
+and a power stated before any reading the gate judges. Neither can be written for a market statistic
+while **not one byte of Tier C has ever been opened**: the completeness of the quote capture, the
+depth at the touch, the read offsets and the executable spread are all unmeasured, and a gate sized
+against guesses at them is §7 item 15's defect committed at the decision point.
+
+- **TZ-14 — the quote inventory.** The first read of Tier C. It characterises the capture and
+  computes **no statistic that is a function of both a quote and any pricer output**, so Phase 2's
+  sampling rule is still correctable when TZ-15 writes it. It reads no outcome into any printed
+  number. This is TZ-12's position exactly, one phase later.
+- **TZ-15 — the Phase 2 gate, then applied once.** Written only after TZ-14's report is on `main`.
+
+The one quantity TZ-14 borrows from the pricer is `sigma_hat`, to apply the frozen domain rule
+`ADMIT`, so every inventory figure is reported on the population Phase 2 will actually score.
 
 ---
 
@@ -671,6 +690,8 @@ set scored under the sized gate contains a weekend.**
 
 **What the market quotes has never been read.** Tier C has captured seven order-book snapshots per
 interval since 2026-09-12, and not one has been opened. That is Phase 2, and it is the decision point.
+Until TZ-14's report exists, every statement about the book — its depth, its spread, whether both
+sides are quoted at all at `tau = 240` — is a guess, and none is written here.
 
 The recorder is running on `4216c04` with both tiers, `13,907,984,384` bytes free and `2,240`
 interval directories at 2026-09-18 04:28 UTC. **The consumer is stopped, measured at eight reads
