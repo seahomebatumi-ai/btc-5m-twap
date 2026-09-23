@@ -833,8 +833,12 @@ def mode_serve(args, out):
 # ----------------------------------------------------------------------------
 
 def base_rate(p, span_s=BASE_RATE_S, step=TIERC_INTERVAL):
-    """The T0 of every five-minute interval closing in [p - span_s, p)."""
-    return list(range(p - span_s - step, p - step + 1, step))
+    """The T0 of every five-minute interval closing in [p - span_s, p).
+
+    The last slot is p - 2 * step, whose close is p - step; p - step itself is
+    excluded because its close is p, which the half-open window does not hold.
+    """
+    return list(range(p - span_s - step, p - step, step))
 
 
 def p_false_alarm(f, m, units):
