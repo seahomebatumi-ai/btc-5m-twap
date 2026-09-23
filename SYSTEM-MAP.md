@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-09-23-a.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-09-23-b.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,7 +15,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-09-23-a`
+**Revision string:** `2026-09-23-b`
 
 | anchor | value |
 |---|---|
@@ -64,7 +64,8 @@ it added `research/tz14-quote-inventory.py` and changed no path. TZ-14 read `pfa
 calling no `pfair` entry point itself. **PR #17 moved no anchor:** it added
 `research/tz17-settlement-chain.py` and changed no path, merged at `745715e`. TZ-17 and TZ-18 read no
 pricer, and TZ-18's header states `A6` only so that what was not scored is not in doubt. **PR #18 moved
-nothing:** it was closed unmerged (§1).
+nothing:** it was closed unmerged (§1). **PR #19 moves no anchor:** it adds
+`research/tz18a-chainbook-capture.py` and changes no path, and TZ-18a read no pricer.
 
 ### Fingerprint table
 
@@ -92,6 +93,7 @@ printed here or the run is BLOCKED. `tracked` rows are reported with no expectat
 | `research/tz14-quote-inventory.py` | 2,124 | 109,972 | frozen | `978ee4ff992730101e4b5133694b14942cd8cd750269ba1d26c9f077368c4a02` |
 | `research/tz15-phase2-gate.py` | 1,517 | 73,799 | frozen | `66ac0ae0fdd2a4227fd39f1c014f1587a035fbc8e1e0007b5017a1d90dc56aa3` |
 | `research/tz17-settlement-chain.py` | 1,102 | 38,622 | frozen | `e18834241760fe0bdf23fe1ccfd3fed855b75f56a614825c450964de0d28ca92` |
+| `research/tz18a-chainbook-capture.py` | 1,683 | 69,517 | frozen | `e9cb9b478fe40e53c5109f1cc79b1cf9255c75e2ca32221f0df8b116f9579bae` |
 | `research/recorder/recorder.py` | 608 | 25,658 | frozen | `9fd1c7de0f749f8179dc092207b46528e42fd6563ce53d1c245cc74cf5439f03` |
 | `research/recorder/config.py` | 112 | 4,773 | frozen | `8111dfe473ee694fbe295cabd5fb47a8c9e56ac032ffebf42fd0167964e6181d` |
 | `research/recorder/manifest.py` | 254 | 10,002 | frozen | `79c99010a1c3e035a982a8c64dcf92afaf3ec956e3c3c4a2d354345dedb14045` |
@@ -116,24 +118,30 @@ writes them again. `tz15-phase2-gate.py` is frozen for Phase 2's first reading, 
 **the only implementation of the exact Poisson-binomial tail, `pb_upper`, its critical count, `crit`,
 and the after-fee selection, `select`**, which a later TZ imports and never writes again.
 `tz17-settlement-chain.py` is frozen for the backup track's first answer, B0, and because it holds
-**the only committed request outside the recorder that the venue's edge serves** — `Accept:
+**the first committed request outside the recorder that the venue's edge serves** — `Accept:
 application/json` and a `User-Agent` of its own, where Python's default agent is refused (§6).
+**`tz18a-chainbook-capture.py` is frozen because the chain book service runs its copy byte for byte**
+— an unauthorized edit is a change to a running instrument, as for the recorder — and for B1's
+answer; its `build_request` is the second such request, `User-Agent: btc-5m-twap-tz18a`.
 `tz06-calibration.py` is frozen at
 its post-PR-#9 hash: it carries `after` and `need`, and at their defaults the run is the one TZ-06
-ran. **Every one of the twenty-five rows above was read byte for byte by the Architect from
-`origin/main` at `202b791862736de0648b7fc1e1a53fb0a3ef3d93` on 2026-09-23**, the TZ-18 report, by
-cloning the public repository and hashing each path: 25 of 25 equal to the values printed here, lines
-and bytes included. The twenty-four carried rows are byte-identical to their values at `8d2a4c6`, and
-the one row this revision adds is byte-identical to PR #17's head `8f1bc93` and to the hash TZ-17's
-report prints.
+ran. **Every one of the twenty-six rows above was read byte for byte by the Architect on 2026-09-23**,
+by cloning the public repository and hashing each path: the twenty-five carried rows from `origin/main`
+at `7d8cb756d2081524e788c3ab9c3addccfc798057`, the TZ-18a report, 25 of 25 equal to the values
+printed here, lines and bytes included; and the one row this revision adds from PR #19's head
+`ca4bbc1`, equal to the hash the TZ-18a report prints — whose byte count, `69,357`, is its first
+commit's (§7 item 79). **That row is on `main` once PR #19 is merged, and this revision is uploaded
+after the merge.**
 
-**Revision `2026-09-19-c` reached `main` at `f883be7` and is confirmed there**, as §7 item 18's rule
-requires of every upload: SHA-256 `3a88c35707fb937043b56571d5b146819a43c905122f379ad89fc75c95e3e1a0`,
-byte-identical to the Architect's mirror, and it is the revision TZ-17 and TZ-18 were gated against.
-`c0d18e8` re-uploaded it unchanged on 2026-09-22 — an empty commit — and
-`CryptoTZ/TZ-18-chainbook-capture-deploy.md` landed at `795f176` byte-identical to the copy the
-Architect audited. **This revision replaces the map and ships alone:** no TZ is attached. It is paired
-with CANON revision `2026-09-23-a`, which lives in the Architect's project instructions and not here.
+**Revision `2026-09-23-a` reached `main` at `fda5eb6` and is confirmed there**, as §7 item 18's rule
+requires of every upload: SHA-256 `704070149009b9581de1210d371d0edba9f3dc9a608151a90d0498d31d447b00`,
+byte-identical to the Architect's mirror, and it is the revision TZ-18a was gated against.
+`CryptoTZ/TZ-18a-chainbook-capture-redeploy.md` landed at `3a95ae1` byte-identical to the copy the
+Architect delivered, SHA-256 `b989a1d32ee66cf7c95495773484037e9399542829b311045f6e938637001ba1`.
+**This revision replaces the map and ships alone, after PR #19's merge:** no TZ is attached. It is
+paired with CANON revision `2026-09-23-a`, which lives in the Architect's project instructions and not
+here; that revision's backup-track table still reads B1 open, and its next revision closes it as §5
+does.
 
 ---
 
@@ -153,21 +161,24 @@ on 2026-09-23; it holds text alone and stays that way.
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
 **Branches on `origin`, read with `git ls-remote` on 2026-09-23 as §7 item 55 requires.** `origin`
-carries **one branch and no other**: `refs/heads/main` at `202b791862736de0648b7fc1e1a53fb0a3ef3d93`,
-equal to `HEAD` — the TZ-18 report, 2026-09-22 23:20:20 UTC, parent `795f176`, the upload of TZ-18's
-specification. `tz-18-chainbook-capture` was deleted when PR #18 was closed unmerged, and
+carries **two branches**: `refs/heads/main` at `7d8cb756d2081524e788c3ab9c3addccfc798057`, equal to
+`HEAD` — the TZ-18a report, 2026-09-23 18:23:56 UTC, parent `3a95ae1`, the upload of TZ-18a's
+specification — and `refs/heads/tz-18a-chainbook-capture` at `ca4bbc1`, PR #19's head, which the Boss
+merges after the Architect's verdict of 2026-09-23. `tz-18-chainbook-capture` was deleted when PR #18 was closed unmerged, and
 `tz-17-settlement-chain` after PR #17's merge, as `tz-15-phase2-gate`, `tz-14-quote-inventory`,
 `tz-13-sized-gate-test3`, `tz-12-sized-gate`, `tz-11a-student-link` and `tz-09-disk-inventory` were
-before them. **Every commit any artifact names is still served**, as `refs/pull/NN/head`: `18` =
-`8caa0b4`, `17` = `8f1bc93`, `16` = `f7f171a`, `15` = `ffef5cd`, `14` = `7ef9723`, `13` = `6dc0e24`,
+before them. **Every commit any artifact names is still served**, as `refs/pull/NN/head`: `19` =
+`ca4bbc1`, `18` = `8caa0b4`, `17` = `8f1bc93`, `16` = `f7f171a`, `15` = `ffef5cd`, `14` = `7ef9723`, `13` = `6dc0e24`,
 `12` = `2746518`, `11` = `d34606e`, `10` = `e45f38e`, `9` = `e2625ea`, `8` = `26bbb61`, `7` = `c44af68`,
 `6` = `5ed667a`, `5` = `4216c04` — the commit the capture runs — `4` = `0e13a5c`, `3` = `ee2f632`, `2` =
 `3895356` and `1` = `d9e58e8`. The tag `refs/tags/tz-01a-dataset` is an annotated object `d3251aa`
-peeling to `ea9290b`: twenty-two refs in all. No `tz-11` and no `tz-16` branch exists anywhere. The
+peeling to `ea9290b`: twenty-four refs in all, besides `refs/pull/19/merge`, which GitHub keeps while
+PR #19 is open. No `tz-11` and no `tz-16` branch exists anywhere. The
 head of `main` is never a gate; commits are named where they matter.
 
 | pull request | head | disposition |
 |---|---|---|
+| PR #19 | `ca4bbc1` | the chain book, redeployed: TZ-18's instrument with every header fixed — `build_request` sends `Accept: application/json` and `User-Agent: btc-5m-twap-tz18a` — the receive stamps and the single-instance check repaired, the document instant at `T+625`, `--prestart` proving the request path before the service starts, `--prove` reading G-DEPLOY and G-TIERC as of a fixed instant, `--verify-tz17` removed, and 39 self-test asserts. Two commits: `9973e44`, whose `--prestart` stopped at its own assert, and `ca4bbc1`, one expression later (§7 item 78). **Accepted 2026-09-23; the Boss merges it before this revision is uploaded.** One file, 1,683 lines, no other path changed. |
 | PR #18 | `8caa0b4` | the chain book: one standard-library instrument with `--selftest`, `--verify-tz17`, `--serve` and `--prove`. **Closed unmerged** after the Architect's verdict of 2026-09-23, branch deleted: its service could not read the venue (§7 item 77). Its `--verify-tz17` produced G-CHAIN, which stands (§4). One file, 1,420 lines, never on `main`. |
 | PR #17 | `8f1bc93` | the settlement chain: Stage F's fetch of the venue's own documents for 200 fifteen-minute windows and the 601 five-minute slots beneath them, Stage A's identities I1–I3 and D1–D7, and 37 self-test asserts. **Merged 2026-09-22** into `main` at `745715e` after the Architect's verdict, branch deleted. One file added, 1,102 lines, none changed, no anchor moved. |
 | PR #16 | `f7f171a` | the Phase 2 gate: the selection on the after-fee edge, the exact constants, the once-only label read behind the push check and the ledger, the reading, influence, diagnostics, the projection and seven self-tests. **Merged 2026-09-19** into `main` at `8d2a4c6` after the Architect's verdict, branch deleted. One file added, 1,517 lines, none changed, no anchor moved. |
@@ -207,18 +218,23 @@ re-upload; `2054800` — the upload of TZ-17's specification, and the merge base
 `8f1bc93` — the commit TZ-17 built and its runs are of; `c4f2099` — the TZ-17 report; `745715e` — the
 merge that put it on `main`; `795f176` — the upload of TZ-18's specification, and the merge base TZ-18
 built on; `8caa0b4` — the commit TZ-18 built, which every run of it and its service's `start` record
-name; `202b791` — the TZ-18 report, and the state every row of §0 was read at.
+name; `202b791` — the TZ-18 report; `fda5eb6` — the upload of revision `2026-09-23-a`; `3a95ae1` — the
+upload of TZ-18a's specification, and the merge base TZ-18a built on; `9973e44` — TZ-18a's first
+commit, whose `--prestart` stopped at its own assert; `ca4bbc1` — the commit TZ-18a deployed, which
+its counted runs and its service's `start` record name; `7d8cb75` — the TZ-18a report, and the state
+the carried rows of §0 were read at.
 
 **Tag:** `tz-01a-dataset` → `ea9290b92b9fa50c22d0560d5d01dfa392af44df`.
 
 A read-only mirror of this map also sits in the Architect's project files. The repository copy is
 the authority; the mirror is never edited and never quoted as state.
 
-**Files on `main`:** twenty-seven TZ files (`TZ-01` … `TZ-18`, none yet for TZ-16), twenty-seven
+**Files on `main`:** twenty-eight TZ files (`TZ-01` … `TZ-18a`, none yet for TZ-16), twenty-eight
 reports, seventeen `research/` scripts, six `research/recorder/` files, two governance files, `.gitignore`
-— **80 paths**, counted by the Architect with `git ls-tree -r --name-only` on `origin/main` at `202b791`:
-27 under `CryptoReports/`, 27 under `CryptoTZ/`, 23 under `research/` and 3 at the root. **Eight of the
-twenty-seven reports are BLOCKED reports**, each by its own status line and each one file in one commit: TZ-04 at
+— **82 paths**, counted by the Architect with `git ls-tree -r --name-only` on `origin/main` at `7d8cb75`:
+28 under `CryptoReports/`, 28 under `CryptoTZ/`, 23 under `research/` and 3 at the root; **PR #19's merge
+adds the eighteenth `research/` script, making 83.** **Eight of the
+twenty-eight reports are BLOCKED reports**, each by its own status line and each one file in one commit: TZ-04 at
 `28e4444`, TZ-04a at `3eead29`, TZ-05 at `0e13a5c`, TZ-07 at `8377180`, TZ-08 at `2fab92a`, TZ-10 at
 `1fcd19f`, TZ-10a at `d015d3c` and TZ-11 at `0b080c1`. For the last three no branch and no pull
 request exists, and no `research/` file moved (§7 item 73).
@@ -310,6 +326,7 @@ exactly one interval.
 | TZ-15 | T0 `1789206900` … `1789595400` | 1,296 | **TZ-14's 1,200, re-formed by `tz14.the_set` unchanged** and asserted by member-list SHA-256 `baa5a9d26855…`, admissible `631` / `628` / `615` / `619` / `621` at `tau` 240 … 60 as TZ-14 measured them. **The first joint statistic of quote and label:** at every admissible checkpoint one share of the side whose ask `p_t` calls cheap after the fee — `405` / `428` / `440` / `380` / `271` selected, 1,924 in all — and **the labels of the 678 members eligible at some `tau`, read once per scored run by `tz10b.m2_labels`, 23 min 48 s after the scoring commit reached `origin`**; member-list SHA-256 `77944a015d4c…`. 12,000 admitted quote reads, `gamma.json`, `manifest.json`, `chainlink` and `twap60`; `resolution.json` inside `tz06.qualification` and in that one read, `1,974` opens a run = `1,296 + 678`. **No file of any interval with `T0 > 1789669800` opened but `manifest.json`**, asserted from the instrument's own audit hook. Re-derived by the Architect: `Up + Down` and `weekday + weekend` equal `n` at 5 of 5 `tau`, the two-sided books `631` / `625` / `558` / `474` / `311`, each half of TZ-14's admissible two-sided reads, and the opens reconciled |
 | TZ-17 | — | — | **no capture file opened.** Its input is the venue's own documents over HTTP: 801 settled market documents, largest epoch `1789178400`, `491,400` s below the reserved boundary. Its §0 `find` and `grep` are the host gate's and read no body |
 | TZ-18 | T0 `1790116200` … `1790118600` | 9 | **`manifest.json` only — 8 opens**, for G-TIERC's proof and control windows, under the manifest exception below; `1790118600` had no manifest yet when the proof ran. Nothing else under the capture root was opened, each open asserted by the instrument's own guard |
+| TZ-18a | T0 `1789579800` … `1790186400` | 2,023 | **`manifest.json` only.** `--prestart`'s base rate opened all 2,016 of T0 `1789579800` … `1790184300`, `quotes_complete` true at 2,016; R4 and R4b opened 15 each, T0 `1790182800` … `1790186400`, for G-TIERC's proof and control windows and its two counted exposed intervals, with byte-identical outputs. Nothing else under the capture root was opened, each open asserted by the instrument's own guard |
 
 **Tier C has been read twice, for the same 1,200 intervals, and scored once**, by TZ-15. Every quote
 after `1789595400` is unread, and every label after `1789669800` as well. **Reserved since 2026-09-19,
@@ -323,8 +340,8 @@ reads every manifest for every set formation and a manifest carries neither a pr
 It is the only span of this capture whose quotes and labels no one has seen. **A fifteen-minute
 market's settled document is covered too wherever its window overlaps the span:** it carries the
 published readings at `T` and `T+900`, which are the reserved five-minute markets' own (§4). The span's
-five-minute books are also stored by the chain book, and are reserved there on these terms as well as
-on §2.5's.
+five-minute books are also stored by the chain book, since 2026-09-23 17:39:50 UTC, and are reserved
+there on these terms as well as on §2.5's.
 
 **Measured footprint.**
 
@@ -493,12 +510,13 @@ stored** (§2.5).
 
 ### 2.5 The fifteen-minute market, and the chain book
 
-**TZ-17's documents.** `/root/tz17-work/raw/` holds 801 settled market documents as the venue served
-them on 2026-09-22: 200 `btc-updown-15m-{T}` for the 200 consecutive windows `T` from `1788998400` to
-`1789177500`, and the 601 `btc-updown-5m-*` slots from `1788998400` to `1789178400` beneath them, each
-named by SHA-256 in TZ-17's committed CSV. **They are byte-stable at the venue:** the Architect
-re-fetched all 801 on 2026-09-23 and they hash equal at 801 of 801. The largest epoch is `491,400` s
-below §2.3's boundary.
+**TZ-17's documents.** The 801 settled market documents TZ-17 stored on 2026-09-22 — 200
+`btc-updown-15m-{T}` for the 200 consecutive windows `T` from `1788998400` to `1789177500`, and the 601
+`btc-updown-5m-*` slots from `1788998400` to `1789178400` beneath them, each named by SHA-256 in TZ-17's
+committed CSV — are held by hash in `/root/btc-forensics/`, copied by TZ-18a §9 before
+`/root/tz17-work/` was removed, 801 of 801 asserted. **They are byte-stable at the venue:** the
+Architect re-fetched all 801 on 2026-09-23 and they hash equal at 801 of 801. The largest epoch is
+`491,400` s below §2.3's boundary.
 
 **What they establish** (§4). The fifteen-minute market opening at `T` and the five-minute market
 opening at `T` publish the same price-to-beat literal; both families name one resolution source; each
@@ -507,18 +525,26 @@ family's outcome agrees with one reading at every shared boundary; and the readi
 reading at `T+600` is at or above the reading at `T`, every state that resolves `btc-updown-5m-{T+600}`
 Up resolves `btc-updown-15m-{T}` Up**, and symmetrically below — exactly, with no margin to carry.
 
-**The chain book.** Root `/var/lib/btc-chainbook/` on `/dev/vda2`, outside the repository. TZ-18
-designed it: for each 900-second window `T`, the documents of `btc-updown-15m-{T}` and
-`btc-updown-5m-{T+600}` at `T+605`, then four `/book` reads — both tokens of both markets, four threads
-released together — at seven checkpoints from `T+655` to `T+885`, five seconds before Tier C's reads of
-the same five-minute market; each reply stored verbatim with its status, byte count, SHA-256 and times,
-and a `window.json` at `T+905`. **Deployed on 2026-09-22 at 22:53:36 UTC** as pid `2608993`, from the
-copy `/root/tz18-svc/tz18-chainbook-capture.py` at `8caa0b4`, it was **refused by the venue on every
-request** for want of a `User-Agent` (§6, §7 item 77): its windows hold two 403 documents each and 28
-book entries with status null and reason `no_token_ids`. **No book has been stored.** Its stop was
-handed to the Boss on 2026-09-23, because `kill` is refused in the Executor's session; TZ-18a's §0
-verifies it from the service's own `stop` record in `runtime.jsonl` and from `/proc`, not from his
-report.
+**The chain book.** Root `/var/lib/btc-chainbook/` on `/dev/vda2`, outside the repository. For each
+900-second window `T`: the documents of `btc-updown-15m-{T}` and `btc-updown-5m-{T+600}` at **`T+625`**,
+20 s after the recorder's own fetch of that five-minute document at `T0+5`; then four `/book` reads —
+both tokens of both markets, four threads released together — at seven checkpoints from `T+655` to
+`T+885`, five seconds before Tier C's reads of the same five-minute market; each reply stored verbatim
+with its status, byte count, SHA-256 and times, and a `window.json` at `T+905`. Thirty requests per
+900 s. **TZ-18's deployment** ran from 2026-09-22 22:53:36 to 2026-09-23 06:44:00 UTC as pid `2608993`
+and was refused on every request for want of a `User-Agent` (§7 item 77); its 32 windows, `1790117100`
+to `1790145000`, hold two 403 documents each and no book. Its `stop` record, `wall_ns`
+`1790145840007723380`, was verified by TZ-18a §0.4 together with `/proc`.
+**TZ-18a's service runs** — pid `2699889`, started 2026-09-23 17:39:50 UTC, from
+`/root/tz18a-svc/tz18a-chainbook-capture.py` at `ca4bbc1`, SHA-256 `e9cb9b47…`, under the exact argv
+`/root/tz01-env/venv/bin/python -B -u /root/tz18a-svc/tz18a-chainbook-capture.py --serve`, appending to
+`service.log`. Its proof, as of `1790187453`: all 90 requests of its first three windows served, the
+84 book reads `200` and parsing as JSON, and **the four books of a checkpoint received within `1.19` to
+`28.43` ms of one another, median `10.14`, over 21 checkpoints.** It stores `28,467` bytes a window,
+`2,732,864` a day, so its per-process write cap of `200,000,000` bytes stops it, with a `stop` record,
+about 73 days after its start — around 2026-12-05. **Its stop, whenever a TZ orders one, is TZ-18a
+§6.1's block K-18a**, run by the Boss where the session refuses `kill`, and verified from the `stop`
+record and `pgrep -fx`.
 
 **Reserved from its first byte, on Tier C's terms** (TZ-18 §9). Until the TZ that scores it — B2,
 written only after TZ-16's first reading is on `main` — no TZ extracts a value from a body stored under
@@ -529,6 +555,14 @@ count, SHA-256 and times, and whether its body parses as JSON, and nothing else.
 is an interval of §2.3's span**, so its bodies are under that reserve as well, and B2 reads a window
 only once §2.3's reserve has released that interval — CANON PART II's backup-track rule. Nothing of
 this capture enters git history.
+
+**The interlock continues in TZ-16.** G-TIERC read PASS on two exposed intervals, its minimum, and
+the third was not counted (§7 item 80): it sees a gross disturbance and nothing finer. Every window
+the service runs exposes one five-minute interval, `E = T + 600`, so from 2026-09-23 17:39:50 UTC one
+interval in three of TZ-16's span — `T0 ≡ 600 (mod 900)` — carries its load. **TZ-16's set disclosure
+splits every non-member failing on `quotes_complete` by exposure**, against a base rate of 0 in 2,016
+over the week before the service started. A difference there is the interlock firing, and the TZ that
+sees it orders the stop by K-18a.
 
 ---
 
@@ -553,6 +587,7 @@ this capture enters git history.
 | `research/tz14-quote-inventory.py` | **the quote inventory, and the quote machinery every later TZ imports.** `the_set` re-forms TZ-14's set with every assertion; `quote_lines` reads one quote file as the recorder wrote it, `raw` included, located by `manifest._stream_path`; `book_of` parses a reply into `Decimal` levels; `best_of` and `touch_of` give the quoted and the executable touch without depending on order; **`fee_pp` is the only implementation of CANON §1.1's taker fee**; `documents` maps token to outcome from `gamma.json`. Computes no probability. **Importing it has three side effects a later TZ names:** it writes the three thread-count environment variables; it loads `tz12-sized-gate.py`, so a later TZ takes `tz12` and everything below it from `tz14` rather than loading any of them again; and it **installs an audit hook that records the basename of every open under the capture root for the life of the process and cannot be removed** — it only appends to `tz14.CAPTURE_OPENS`. `tz14.v1_gates` asserts revision `2026-09-18-b` and twenty `frozen` rows, and no later TZ calls it. |
 | `research/tz15-phase2-gate.py` | **The Phase 2 gate, on `main` since `8d2a4c6`.** Re-forms TZ-14's set through `tz14.the_set`, takes `p_t` from `tz11a.checkpoint_row` and each touch from `tz14.touch_of` at the reply's own minimum size and tick, and `select`s one share per admitted checkpoint — the larger after-fee edge, strictly positive, a tie to `Up`, the fee through `tz14.fee_pp`. **`pb_upper` is the exact Poisson-binomial upper tail**, a `Decimal` recursion at 60 digits, and `crit` its smallest critical count; both agree with an independent enumeration in rational arithmetic, and `select` with an independent re-implementation, at 0 disagreements, checked by the Architect. The labels are read once, through `tz10b.m2_labels`, behind a push check and a ledger. **Carries no threshold of its own beyond TZ-15 §4**, and its `reading` is §4's table, which §7 item 69 retires: a later TZ imports the tail, the selection and the guards, never `reading`. |
 | `research/tz17-settlement-chain.py` | **the settlement-chain instrument, and the only committed request outside the recorder that the venue's edge serves.** Stage F fetches the venue's own market documents from the public Gamma path, paced at `0.5` s with a retry ladder, stores each body verbatim with its SHA-256 and stops at the 200th qualifying candidate; Stage A computes I1–I3 and D1–D7 from the stored bodies alone. Standard library only; imports nothing from the repository. Its request carries `Accept: application/json` and `User-Agent: btc-5m-twap-tz17` (§6). Its retry, fail-fast and early-stop paths ran only in its self-tests. |
+| `research/tz18a-chainbook-capture.py` | **the chain book: the instrument and the service's code.** `build_request` sends `Accept: application/json` and `User-Agent: btc-5m-twap-tz18a`, and `http_get` stamps a receive time only where a status came back; `same_service` identifies a process by equality with its exact argv; `--prestart` proves the request path on the host and states G-TIERC's base rate before the service starts; `--serve` is the service and refuses any other command line; `--prove` reads G-DEPLOY and G-TIERC as of a fixed instant, byte-identical across runs. Standard library only; imports nothing from the repository; 39 self-test asserts, three of them against a loopback listener. Derived from PR #18's `8caa0b4` by the sixteen changes of TZ-18a §3.3 and the four helpers its report names. On `main` from PR #19's merge. |
 | `research/recorder/recorder.py` | the live capture, Tier A and Tier C in one process. Read-only: no order path, no CLOB authentication, no credential, no pricing arithmetic. |
 | `research/recorder/config.py` | every constant the capture uses, each traced to the TZ that fixed it |
 | `research/recorder/manifest.py` | the per-interval manifest, a pure function of the interval directory |
@@ -560,10 +595,11 @@ this capture enters git history.
 | `research/recorder/probe.py` | the Tier B order-book probe, run once |
 | `research/recorder/selftest.py` | the recorder's self-tests — 115 asserts, each aborting the run |
 
-**`research/tz18-chainbook-capture.py` is not on `main`.** It exists only as PR #18's head `8caa0b4`,
-1,420 lines, 57,409 bytes, SHA-256 `33753b2bb1e322a081e6cba8bad976268e2d6046dc350e6ceae3e748ad6e4bfe`,
-closed unmerged (§7 item 77), and as the copy `/root/tz18-svc/tz18-chainbook-capture.py` its service
-ran. No row of §0 carries it, and none will until a corrected file is merged.
+**`research/tz18-chainbook-capture.py` is not on `main` and never will be.** It exists as PR #18's head
+`8caa0b4`, 1,420 lines, 57,409 bytes, SHA-256
+`33753b2bb1e322a081e6cba8bad976268e2d6046dc350e6ceae3e748ad6e4bfe`, closed unmerged (§7 item 77), and by
+hash in `/root/btc-forensics/`, where TZ-18a §9 copied the copy its service ran. Its corrected successor
+is `tz18a-chainbook-capture.py`.
 
 Outputs go to `research/out/**`, git-ignored except `twap-divergence-summary.md` and
 `twap-divergence-contamination.md`. **`/root/tz01-out-archive/`, `/root/tz06-work/`,
@@ -606,19 +642,21 @@ ran the handed block on 2026-09-19 and reported `exit=1`, and TZ-17's §0 verifi
 exit `1`, on 2026-09-22.** **`/root/tz15-work/`** — the worktrees `/root/tz15-work/wt` and
 `/root/tz15-work/wt-report`, the run directories and the label ledger — is TZ-16's to reclaim after
 copying what TZ-15's report names by hash; TZ-16 reads two of its files first, `tz15-constants.json`
-at `e6a93f9371e9…` and `tz15-observations.csv` at `a7ac8a495e00…`. The worktrees registered at
-TZ-18's end were seven: the primary checkout `/root/btc-5m-twap`, `/root/tz15-work/wt` and
-`/root/tz15-work/wt-report`, `/root/tz17-work/wt` and `/root/tz17-work/wt-report`, and
-`/root/tz18-work/wt` and `/root/tz18-work/wt-report`.
-**`/root/tz17-work/`** — 801 bodies under `raw/`, `index.jsonl`, `refetch/`, `scratch/` with a pre-run
-probe and three harnesses, `run-1/`, `run-2/`, both worktrees and an untracked `research/__pycache__/`
-inside `wt` — is TZ-18a's to reclaim once nothing TZ-18a runs reads it, after copying into
-`/root/btc-forensics/` every file whose SHA-256 a committed report prints, by TZ-14's predicate: the
-bodies, by TZ-17's CSV, and `tz17-candidates.csv` and `tz17-summary.json`, by TZ-17 §2.11 and §2.12.
-**`/root/tz18-work/`** — both worktrees, `run-1/` to `run-3/`, `predebug/` and the Executor's diagnostic
-scripts — is TZ-18a's to reclaim after it has named the diagnostic slug from those scripts; the TZ-18
-report prints no hash of any of its files (§7 item 77). **`/root/tz18-svc/` is not scratch** while any
-service runs from it, and no TZ removes it before the stop is verified.
+at `e6a93f9371e9…` and `tz15-observations.csv` at `a7ac8a495e00…`. **TZ-18a §9 copied 835 more, making `1,046`** files — 978 distinct hashes, `134,111,602` bytes —
+the 211 already there hashing unchanged: every file under `/root/tz17-work/`, `/root/tz18-work/` and
+`/root/tz18-svc/` whose hash a committed report prints, by TZ-14's predicate, and by name TZ-18's
+three outputs and the thirty files outside `/root/tz18-work/`'s worktrees, unread. TZ-17's 801
+bodies, `tz17-candidates.csv`, `tz17-summary.json`, and TZ-18's `tz18-verify.csv` `0bbb345d…`,
+`tz18-verify.json` `76b12513…` and `tz18-proof.json` `95b8f173…` are held, asserted by hash. It
+removed the four worktrees of `/root/tz17-work/` and `/root/tz18-work/` by `git worktree remove`
+without `--force` — one untracked `__pycache__` deleted first — and the three trees `/root/tz17-work`,
+`/root/tz18-work` and `/root/tz18-svc`, **none refused by the session's classifier**, each verified
+gone by `test -e`. **The worktrees registered at TZ-18a's end are five:** the primary checkout
+`/root/btc-5m-twap`, `/root/tz15-work/wt` and `/root/tz15-work/wt-report`, and `/root/tz18a-work/wt`
+and `/root/tz18a-work/wt-report`. **`/root/tz18a-work/`** — both worktrees, `run-1/` to `run-3/` and
+`forensics-before.sha256` — is the next TZ's to reclaim after copying what TZ-18a's report names by
+hash. **`/root/tz18a-svc/` is not scratch** while the service runs from it, and no TZ removes it before
+that service's stop is verified.
 
 ---
 
@@ -675,8 +713,8 @@ service runs from it, and no TZ removes it before the stop is verified.
 | **the outcomes tracked the market's prices rather than the pricer's, at four of five `tau`** | Architect's arithmetic over TZ-15's printed sums, post hoc: the pricer claimed `Σq − Σa` = `+17.3` / `+17.6` / `+16.0` / `+15.1` / `+11.5` wins over the ask at `tau` 240 … 60, and the outcomes gave `S − Σa` = `−6.2` / `−1.5` / `−2.2` / `+7.3` / `−3.6`; under the pricer's own law the lower tail at the observed `S` is about `0.004` / `0.010` / `0.007` / `0.12` / `0.002` by a normal approximation. TZ-15's diagnostics: the market's mid beats `p_t` on the Brier score at 5 of 5 `tau`, by `0.0008` to `0.0041`, over `631` / `625` / `558` / `474` / `311` two-sided books, and is the more confident of the two at `0.48` to `0.62` of them | **stands as a finding, not a reading, and it closes nothing.** A test of the pricer's claim would have rejected it at `tau` 240, 120 and 60 and reached the one-per-cent boundary at 180; TZ-15's gate had no such row (§7 item 69), and its readings are not re-judged. |
 | **the fifteen-minute market opens on the five-minute market's reading and settles on the same chain** | TZ-17, over the 200 consecutive windows from `1788998400` to `1789177500`, against the venue's resolved outcomes: I1, the same price-to-beat literal, 200 of 200; I2 and I3, each family's outcome agreeing with one reading at the shared boundary, 200 of 200; the two five-minute markets inside the window, 200 of 200; one `resolutionSource` for both families at 801 of 801 documents. Gate `N >= 199`, power `0.9106` against a 2% per-window failure rate, fixed before any document was fetched | **stands — B0 closed 2026-09-22.** The 801 documents, re-fetched by the Architect on 2026-09-23, hash equal to TZ-17's at 801 of 801. Two statements of the report are wrong and move nothing (§7 item 74). |
 | **the settlement reading at a boundary is one published number** | TZ-18 G-CHAIN, offline on TZ-17's 801 bodies, each re-hashed to TZ-17's CSV: `finalPrice` of each five-minute market equals the next one's `priceToBeat` at 600 of 600, and the fifteen-minute `finalPrice` equals the `priceToBeat` of the five-minute market at `T+900` and the `finalPrice` of the one at `T+600` at 200 of 200 each — by `Decimal` value and as the same printed literal, 0 mismatches. Gate `Q1 >= 599`, `Q2` and `Q3 >= 199`, fixed before its data | **stands, and it closes the gap TZ-17's audit found**: TZ-17 inferred each settlement from the next market's price to beat, on margins down to `0.071` USD. Re-derived by the Architect from the venue's own bytes on 2026-09-23 — the same 801 bodies by hash — at 1,000 of 1,000 by value and by literal. The nesting of the two families' outcomes is exact. |
-| the chain book records both books at one instant | TZ-18 G-DEPLOY: **0 of the first 14 qualifying checkpoints complete** — every request refused with HTTP 403 | **FAIL, and a fact of the build, not of the venue's books** (§7 item 77). No pairing skew was measured. |
-| a second capture leaves Tier C intact | TZ-18 G-TIERC: `quotes_complete` at 4 of 4 intervals closing in the 1,390 s proof window, and at 4 of 4 in the control window before it | **stands only for the load that ran** — two refused document requests per 900 s, against the 30 requests TZ-18 §3.9 sized. The interlock has not seen the capture's own load. |
+| the chain book records both books at one instant | TZ-18 G-DEPLOY: 0 of 14, every request refused with HTTP 403. **TZ-18a G-DEPLOY: 14 of the first 14 qualifying checkpoints complete** — windows `1790185500` and `1790186400`, and every one of the 84 book reads of its three considered windows `200` and parsing as JSON — against a gate of `>= 13 of 14` whose false-failure probability under a lossless capture is `0` and whose power against a 25% loss is `0.899`, fixed before its data | **stands — PASS, 2026-09-23.** Re-derived by the Architect from the report's disclosure of all 21 considered checkpoints: 14 qualifying, all complete; skews `1,190,143` / `10,143,166` / `28,425,839` ns, minimum / median / maximum, all 21 within 30 ms. TZ-18's FAIL stays the reading of its own build. |
+| a second capture leaves Tier C intact | TZ-18 G-TIERC: 4 of 4, under two refused requests per 900 s. **TZ-18a G-TIERC, under the full load:** exposed intervals `1790185200` and `1790186100`, both fully loaded, `quotes_complete` true at 2 of 2; the third, `1790187000`, fully loaded and not counted, its manifest a fraction of a second past the as-of instant (§7 item 80). False-failure probability `0` — `f = 0` of `m = 2,016` in the week before the service started — and power `0.75` against a disturbance that breaks half the exposed intervals, both fixed before the service started. The unloaded control window reads true at 7 of 7 | **stands at its PASS minimum — a gross-disturbance interlock and nothing finer.** Nothing yet says a finer disturbance is absent; TZ-16's disclosure carries the interlock on (§2.5). |
 | the collector was not modified between TZ-01a and TZ-02 | hash equality, `6c5089…` read from `origin/main` | **stands** |
 | the sign of `D = p_interval − p_naive` has no preferred direction | TZ-02 measurement 1 | **stands, and is of no consequence** |
 | the venue's maker-rewards terms are readable from our capture | TZ-07a V9: the `rewards` key is absent from all 400 `gamma.json`. **TZ-14 §3.8, over 1,200:** the `rewards` object is still absent, but `rewardsMaxSpread` `4.5`, `rewardsMinSize` `50` and `holdingRewardsEnabled` `False` are present at 1,200 of 1,200 as top-level keys; no top-level key carrying a daily rate exists | **NARROWED.** The per-market terms are in the capture under individual names; the rate paid is not, so no maker income can be computed from it. |
@@ -699,7 +737,7 @@ service runs from it, and no TZ removes it before the stop is verified.
 | step | question | state |
 |---|---|---|
 | B0 | do both families settle on one reading at the shared boundaries? | **CLOSED 2026-09-22 — yes. TZ-17: 200 of 200 against a 199-of-200 gate**, power `0.91` against a 2% per-window failure rate |
-| B1 | can both books be read at one instant, without disturbing the capture Phase 2 depends on? | **open.** The direct `finalPrice` identity it carried is **closed — TZ-18 G-CHAIN, 1,000 of 1,000 by literal**. The deployment read **G-DEPLOY FAIL, 0 of 14**, on its own build, and G-TIERC PASS under a load it never applied. **TZ-18a redeploys it** and reads both gates under the full load |
+| B1 | can both books be read at one instant, without disturbing the capture Phase 2 depends on? | **CLOSED 2026-09-23 — yes. TZ-18a: G-DEPLOY PASS, 14 of 14, the four books of a checkpoint within `28.4` ms of one another; G-TIERC PASS at its minimum of two exposed intervals.** The direct `finalPrice` identity it carried was closed by TZ-18 G-CHAIN, 1,000 of 1,000 by literal. The chain book runs (§2.5) |
 | B2 | does a violation exist on executable quotes, after both legs' taker fees? | not started; written only after TZ-16's first reading is on `main`, and it reads only windows whose five-minute interval §2.3's reserve has released |
 
 **This project has a settlement variable measured and confirmed, a pricer that Phase 1 has not
@@ -712,8 +750,8 @@ against a 1.5× overconfidence, UNDECIDABLE without it. TZ-13 applied it once to
 one had scored, every constant on disk before any outcome was read. No gate failed anywhere.
 **TZ-15 then applied Phase 2's first gate once, and it decided nothing.** **Beside the phases, the
 backup track has its structure measured and not one of its prices read:** one published reading settles
-every market at a shared boundary, exactly, and the capture that would read both books at once has not
-yet stored one.
+every market at a shared boundary, exactly, and the capture that reads both books at once has stored
+them since 2026-09-23 17:39:50 UTC, reserved and unread.
 
 **What Phase 2 inherits.** Five `tau`, not seven. A domain that quotes on about 70% of weekday
 intervals and 6% to 8% of weekend ones, and no set scored under the sized gate that contains a weekend. A pricer that
@@ -748,7 +786,9 @@ residuals are independent, the first look decides a given `tau` with probability
 `0.65` under either hypothesis, and the two looks together with about `0.86` to `0.95` — the same as
 one look at 3,600; TZ-16 re-derives both under the dependence it measures. At the rate every set has
 qualified at — 90.3% to 92.9% of slots, about 265 a day — 2,400 qualifying slots after `1789669800`
-exist around **2026-09-27** and 3,600 around **2026-10-01**. Nothing runs before the first.
+exist around **2026-09-27** and 3,600 around **2026-10-01**. Nothing runs before the first. **From
+2026-09-23 17:39:50 UTC one interval in three of that span is exposed to the chain book**, and TZ-16's
+set disclosure splits its `quotes_complete` failures by exposure (§2.5).
 **Other assets' markets are not a shortcut:** the pricer's domain threshold is in USD/s and its link
 tables are the BTC feed's, so each asset would need its own Phase 0 and Phase 1, and same-window
 outcomes across assets move together, so they add far less information than their count.
@@ -766,11 +806,11 @@ outcomes across assets move together, so they add far less information than thei
 | auth | CLI subscription auth; `ANTHROPIC_API_KEY` must not be set |
 | git remote | HTTPS with the repository token embedded in the remote URL |
 | egress, **verified 2026-09-12** | DNS and TCP/443 open to `ws-live-data.polymarket.com`, `gamma-api.polymarket.com`, `clob.polymarket.com`, `ws-subscriptions-clob.polymarket.com`, `docs.polymarket.com`. Anonymous only; no credentials of any kind are held. |
-| **venue edge — the `User-Agent`, measured 2026-09-22 and 2026-09-23** | `gamma-api.polymarket.com` and `clob.polymarket.com` both answer **HTTP 403, body `error code: 1010`**, to a request carrying `urllib`'s default `User-Agent`: every request TZ-18's service sent, and the Executor's diagnostics from the capture host. The Architect reproduced it from a second host and isolated the header: `Accept: application/json` alone is refused, a non-default `User-Agent` alone is served — `200` for a market document, `404` "no orderbook" for a settled token's book. `tz17-settlement-chain.py` sends `btc-5m-twap-tz17` and was served at 841 of 841. **Every request a TZ fixes names its `User-Agent`.** |
-| **disk, measured 2026-09-22 by TZ-17 and TZ-18** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes. **Lowest free reading `13,453,283,328`**, TZ-18's closing read after its R6; its opening read `13,463,633,920` — a fall of `10,350,592` bytes across its session, of which `821,504` its own outputs with its two worktrees excluded, the rest not attributed. TZ-17 read it four times the same day, from `13,528,887,296` at its §0 to `13,513,277,440` at its close, `11,073,071` of that fall its own tree. Earlier lowest readings: TZ-15 `13,757,030,400` at 2026-09-19 08:14:22 UTC, TZ-14 `13,826,813,952`, TZ-13 `13,907,984,384`, TZ-12 `14,206,689,280`, TZ-11a `14,264,078,336`, TZ-11 `14,330,757,120`, TZ-09 `14,416,265,216`. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
+| **venue edge — the `User-Agent`, measured 2026-09-22 and 2026-09-23** | `gamma-api.polymarket.com` and `clob.polymarket.com` both answer **HTTP 403, body `error code: 1010`**, to a request carrying `urllib`'s default `User-Agent`: every request TZ-18's service sent, and the Executor's diagnostics from the capture host. The Architect reproduced it from a second host and isolated the header: `Accept: application/json` alone is refused, a non-default `User-Agent` alone is served — `200` for a market document, `404` "no orderbook" for a settled token's book. `tz17-settlement-chain.py` sends `btc-5m-twap-tz17` and was served at 841 of 841; `tz18a-chainbook-capture.py` sends `btc-5m-twap-tz18a` and was served at 2 of 2 before its service started and at 90 of 90 in the service's proof. **Every request a TZ fixes names its `User-Agent`.** |
+| **disk, measured 2026-09-22 and 2026-09-23 by TZ-17, TZ-18 and TZ-18a** | one writable filesystem `/dev/vda2`, total `31,612,203,008` bytes. **Lowest free reading `13,427,335,168`**, TZ-18a's opening read on 2026-09-23; its closing read `13,430,845,440`, `+3,510,272` across a session that removed three trees and wrote `85,402` bytes of capture. TZ-18's closing read was `13,453,283,328` after its R6, its opening read `13,463,633,920` — a fall of `10,350,592` bytes across its session, of which `821,504` its own outputs with its two worktrees excluded, the rest not attributed. TZ-17 read it four times the same day, from `13,528,887,296` at its §0 to `13,513,277,440` at its close, `11,073,071` of that fall its own tree. Earlier lowest readings: TZ-15 `13,757,030,400` at 2026-09-19 08:14:22 UTC, TZ-14 `13,826,813,952`, TZ-13 `13,907,984,384`, TZ-12 `14,206,689,280`, TZ-11a `14,264,078,336`, TZ-11 `14,330,757,120`, TZ-09 `14,416,265,216`. `/var/lib`, `/root` and `/var/www` are all on it. **Any TZ that states a resource floor states it in exact bytes and derives it from this row.** |
 | **capture cost, measured** | modelled Tier A + Tier C `23,850,461` bytes/day; **measured against the filesystem by TZ-09, `33,632,842` on disk and `26,784,064` apparent**. That is the recorder's own write rate, and **it is not the rate this filesystem is filling at.** |
 | **the consumer — stopped, and now measured rather than reported** | The consumer is `/root/PROJECT_GAMING_PS5/netaudit/telemetry/captures`, another project on this shared host. TZ-10b's two §6 reads, `12,977` s apart, found the whole tree idle at `9,135,750` bytes/day — consistent with TZ-10a. **A third read the TZ did not ask for, `2,423` s after the second, found it writing again: `+36,524,032` bytes**, the largest part one `30,516,707`-byte `.pcap`. Across that window free space fell `66,232,320` bytes — `2,361,691,000` bytes/day, of which at most `18,554,880` is TZ-10b's own scratch, leaving about `1,700,000,000` bytes/day for that project. Our own persistent baseline is unchanged at `50,352,616` bytes/day: capture `33,342,903`, journald `8,794,795`, that project idle `8,214,918`. **TZ-11 §0 and TZ-11a §0 measured it four times across `26,252` s**, from 13:18:30 to 20:36:02 UTC on 2026-09-14: `telemetry-watch.service` read `disabled` (exit 1) and `inactive` (exit 3) at all four, and `/root/PROJECT_GAMING_PS5` held `354,009,088`, `354,582,528`, `355,405,824` and `356,073,472` bytes — `6,794,238` bytes/day of growth, idle by any measure, and `20,135,936` bytes smaller at the first read than TZ-10b's 11:12:25 UTC read, which is the purge. **TZ-12 §0 measured it twice more across `15,395` s on 2026-09-15**, `disabled` (1) and `inactive` (3) at both, the tree at `360,812,544` and `361,918,464` bytes — `6,206,657` bytes/day, the same idle rate six reads running. **TZ-13 §0 measured it twice more across `17,608` s on 2026-09-17 and 2026-09-18**, `disabled` (1) and `inactive` (3) at both, the tree at `367,914,928` and `369,501,594` bytes — idle, eight reads running. **TZ-14 §0 measured it twice more across `1,805` s on 2026-09-18**, `disabled` (1) and `inactive` (3) at both, the tree at `373,987,996` and `374,137,569` bytes — idle, ten reads running. **TZ-15 §0 measured it twice more across `1,817` s on 2026-09-19**, `disabled` (1) and `inactive` (3) at both, the tree at `377,747,683` and `377,910,258` bytes — idle, twelve reads running; across that window `/dev/vda2` gained `9,396,224` bytes used, of which `7,250,569` was TZ-15's own tree, `607,804` the Executor's session store and `162,575` that project, leaving `1,375,276` — `65,395,622` bytes/day — for the capture and everything else. **TZ-17 §0 measured it twice more on 2026-09-22**, `disabled` (1) and `inactive` (3) at both, the tree at `400,769,377` and `400,790,037` bytes, and **TZ-18 §0 once more** the same day, `disabled` (1), `inactive` (3), `403,322,657` bytes — idle, fifteen reads running. The Boss's report is confirmed by measurement, and this row does not rest on it. |
-| **headroom — measured on total free space, and conditional** | From the lowest reading, `13,453,283,328`, to the `2,000,000,000` floor is `11,453,283,328` bytes. **Across the `3.6` days from TZ-15's lowest read, 2026-09-19 08:14:22 UTC, to TZ-18's first, 2026-09-22 before 22:53 UTC, free space fell `293,396,480` bytes**; with `/root/tz17-work`, TZ-17's own `11,073,071`-byte tree, taken out and the `39,278,075` bytes of `/root/tz14-work` reclaimed inside the window put back, `321,601,484` bytes are left — about `89,000,000` bytes/day. The earlier windows measured `129,541,842` bytes/day, TZ-12's last read to TZ-13's, `61,185,412`, TZ-13's last to TZ-14's first, and at most `111,671,404`, TZ-14's first to TZ-15's first. **The fastest, `129,541,842`, is the one quoted, and gives `88` days**, because windows on a shared host fix neither end of the rate. It is the rate of change of free space over a stated window, as §7 item 25 requires, net of each measuring run's own tree, as §7 item 29 requires. **It is conditional on `telemetry-watch.service` staying disabled:** if it is re-enabled the measured active drain of `2,361,691,000` bytes/day returns and headroom is `4.8` days, so every TZ re-reads `df`, `du` and `systemctl is-enabled` in its own §0 and states all three. |
+| **headroom — measured on total free space, and conditional** | From the lowest reading, `13,427,335,168`, to the `2,000,000,000` floor is `11,427,335,168` bytes. **Across the `3.6` days from TZ-15's lowest read, 2026-09-19 08:14:22 UTC, to TZ-18's first, 2026-09-22 before 22:53 UTC, free space fell `293,396,480` bytes**; with `/root/tz17-work`, TZ-17's own `11,073,071`-byte tree, taken out and the `39,278,075` bytes of `/root/tz14-work` reclaimed inside the window put back, `321,601,484` bytes are left — about `89,000,000` bytes/day. The earlier windows measured `129,541,842` bytes/day, TZ-12's last read to TZ-13's, `61,185,412`, TZ-13's last to TZ-14's first, and at most `111,671,404`, TZ-14's first to TZ-15's first. **The fastest, `129,541,842`, is the one quoted, and gives `88` days**, because windows on a shared host fix neither end of the rate. It is the rate of change of free space over a stated window, as §7 item 25 requires, net of each measuring run's own tree, as §7 item 29 requires. **It is conditional on `telemetry-watch.service` staying disabled:** if it is re-enabled the measured active drain of `2,361,691,000` bytes/day returns and headroom is `4.8` days, so every TZ re-reads `df`, `du` and `systemctl is-enabled` in its own §0 and states all three. |
 | **price to beat** | published by Gamma only after settlement, at `events[0].eventMetadata.priceToBeat`, and captured per interval in `resolution.json`. Not available before the close; a live pricer reconstructs it from the feed. **Beside it, `finalPrice` is the reading the market settled on, and it equals the next market's `priceToBeat` as the same literal** — 600 of 600 (§4) — so a label can be read from either document. |
 | **resolution endpoint** | `GET https://gamma-api.polymarket.com/markets/slug/btc-updown-5m-{T0}`, polled from `T0+333` every 15 s; the same path serves `btc-updown-15m-{T}` (TZ-17, 200 of 200). **A settled document is byte-stable**: the 801 TZ-17 stored on 2026-09-22, re-fetched by the Architect on 2026-09-23, hash equal at 801 of 801, so any stored settled body can be re-verified from the venue. |
 | **CLOB websocket** | `wss://ws-subscriptions-clob.polymarket.com/ws/market` |
@@ -782,7 +822,7 @@ outcomes across assets move together, so they add far less information than thei
 | **RTDS session limit, measured 2026-09-10** | the server closes every websocket `7,200` s after it opens, `1001 Going away`, timer restarting on each new connection. Undocumented. **No TZ may require an unbroken socket for longer than this.** |
 | clock | NTP-disciplined; SNTP replies validated at reception since `4216c04`. Maximum absolute offset measured over the TZ-05a window: `18.789` ms; **over TZ-14's 1,200 intervals: `33.946` ms**, no interval above 50. An offset above 50 ms invalidates a latency claim; it is not a membership condition for anything. |
 | **sandbox limit — network** | calls that read the git token and send it to `api.github.com` are refused. `git` push/pull work. Release creation and asset upload cannot be done from inside the session — hand the upload to the Boss and verify by anonymous download. **The Architect's session is not the Executor's and is not constant:** it could not reach `github.com` on 2026-09-22 (TZ-18 §10 C3) and reached it and both venue hosts on 2026-09-23. A TZ never depends on the Architect's reach; a check it cannot perform becomes a BLOCK condition (CANON hard rule 13). |
-| **sandbox limit — destructive actions** | `kill` is refused by the permission classifier, alone or inside a compound command, and TZ-09 established that `rm -rf` of several trees is refused the same way. `rm -rf` of **one** tree was refused for TZ-12, TZ-13 and TZ-15 and **not refused for TZ-14**, three refusals in four TZs, so refusal is not predictable. **Any TZ that must restart the recorder or remove a tree keeps the fallback: it hands the Boss one exact block** and verifies the outcome from `runtime.jsonl`, `ps`, `df` and `test -e` rather than from his report. TZ-18's service is the first process a TZ started that must be stopped this way (§2.5). |
+| **sandbox limit — destructive actions** | `kill` is refused by the permission classifier, alone or inside a compound command, and TZ-09 established that `rm -rf` of several trees is refused the same way. `rm -rf` of **one** tree was refused for TZ-12, TZ-13 and TZ-15 and **not refused for TZ-14**, three refusals in four TZs, so refusal is not predictable. **Any TZ that must restart the recorder or remove a tree keeps the fallback: it hands the Boss one exact block** and verifies the outcome from `runtime.jsonl`, `ps`, `df` and `test -e` rather than from his report. TZ-18's service was the first process a TZ started that had to be stopped this way: the Boss ran its block, and TZ-18a §0.4 verified the `stop` record. **TZ-18a's `rm -rf` of three trees, one tree per command, was not refused.** TZ-18a's running service is stopped only by its block K-18a (§2.5). |
 
 Not yet decided by any TZ and therefore not present: systemd units, the Parquet decision journal,
 any deployment of the engine. **Capture retention is fixed by TZ-09 §5:** the capture is never deleted; archiving,
@@ -869,9 +909,13 @@ to `/root/btc-forensics/` first.
 | 72 | **Three sentences of TZ-15 held on the wrong run, the wrong count or the wrong type**, and the Executor read each correctly. V6 asserted at step 3 that `git diff --name-only` names one file, and step 3 runs on every tree, where before the commit it names none — the Executor asserted a subset and reported both (its §16 item 1). V4 (c) said TZ-14's two runs left two identical copies of its observations file; TZ-14's six trial runs left six more, eight in all, a count carried from TZ-14's account of its runs rather than read (its item 3). §5.2 item 7 wrote the power as a bare `0.8` for a comparison the instrument makes in `Decimal`, and the floor-inclusive case passes only because that float rounds up (its item 4). None moves a number. Architect's defect, three times. | closed by ruling — the three readings are upheld. Repaired by rule: **every assertion a Validation row fixes names the runs on which it must hold; a count of files on the host is read by the TZ that states it, never carried from a report's account of its runs; and a literal handed to an exact comparison is written in the type the comparison uses.** |
 | 73 | **Five statements were carried rather than read, three in this map and two in the CANON.** §1 said "Three of the twenty-three reports are BLOCKED reports" through at least revisions `2026-09-18-b` and `2026-09-19-a`: at `2026-09-19-a` `main` held twenty-four reports, and eight are BLOCKED reports by their own status lines — TZ-04, TZ-04a, TZ-05, TZ-07, TZ-08, TZ-10, TZ-10a and TZ-11. §2.4 still said no aggregation of the order book had been performed, a revision after TZ-14 performed one. §1's pull-request table still said PR #10's branch exists, which no `ls-remote` has shown since 2026-09-17. CANON §1.4 still gave the tick as `0.01` after item 68 corrected it here, and CANON §1.5 still said the market's quotes had never been measured after TZ-14 read them. Nothing was computed from any of them. Architect's defect, item 55's class. | closed by correcting §1 from `git ls-tree`, `ls-remote` and each report's status line, §2.4 from §2.3, and the CANON in its revision `2026-09-19-a`. Repaired by item 55's rule, extended: **every count and every "not yet" this map or the CANON states is re-read at each revision from the artifact it describes, and one that was not re-read is deleted rather than carried.** |
 | 74 | **TZ-17's report named six things that could not be implemented as written, two of them the Architect's; the audit found two wrong statements and one gap.** (1) V11 was fixed "after the report commit", where contract §3.2 forbids quoting it; the Executor ran it after the branch push and before the report commit. (4) H2 read "`pgrep` prints at least one line" from `pgrep -af recorder`, and the Executor's own shell, which carried the pattern, printed the second line. The rest are disclosures: (2) `/root/tz17-work/scratch/`, a pre-run probe of one candidate's documents and three harnesses, outside §9's list; (3) an untracked `research/__pycache__/` inside `/root/tz17-work/wt`, left because that TZ removed no tree; (5) the retry, fail-fast and early-stop paths never ran live; (6) the upper bounds were not reached. **Two statements of the report are wrong and move no number:** §2.6 puts its tightest margin, `0.071` USD, on "a ~114,000 USD number, 6 × 10^-7 relative" — the 801 documents' readings run from `76,537` to `79,448` USD, so it is about `9 × 10^-7`; and §4 says the backup track's first step "did not close" beside its own PASS. **The gap:** TZ-17 inferred each settlement from the next market's `priceToBeat` while every body it stored carries the venue's own `finalPrice`. | closed. (1) by TZ-18's wording, V14 and V15 "after the branch push and before the report commit"; (4) by CANON's rule that a process-identity condition matches the whole command line exactly — TZ-18's H2, `pgrep -fx`, read one line; (3) is carried in §3's retention list; the gap by TZ-18's G-CHAIN, 1,000 of 1,000 by literal (§4). The committed report is not edited. Repaired by item 13's rule, extended: **a figure a report states about its own data is computed from that data by the instrument, never written from memory.** |
-| 75 | **TZ-18 let a request defect reach a long-lived process, then left the process no way to stop.** Its run order issued no request through the instrument's own request function before R2 started the service. It cited TZ-17's 801 HTTP 200s as proof that the fifteen-minute slug is served without the request that produced them — TZ-17 sends `Accept` and its own `User-Agent`, and the edge refuses Python's default agent (§6). And §6 R5 authorized a stop only on a G-TIERC FAIL, so the G-DEPLOY FAIL left a service sending refused requests from the capture host — the host Tier C reads the venue from — with no route inside the TZ to stop it. Architect's defect, three parts. | open until TZ-18a is on `main`. Repaired by rule, now **CANON hard rule 14**: **a TZ that starts a long-lived process first issues one live request per endpoint through the process's own request function, asserted served and parsed; fixes every header of that request; and authorizes and names the process's stop on every FAIL of every gate that judges it — by the Boss's hand where the session refuses `kill` — verified from the process's own record.** And: **evidence that the venue serves a request is cited with the whole request that produced it — method, URL and every header.** |
+| 75 | **TZ-18 let a request defect reach a long-lived process, then left the process no way to stop.** Its run order issued no request through the instrument's own request function before R2 started the service. It cited TZ-17's 801 HTTP 200s as proof that the fifteen-minute slug is served without the request that produced them — TZ-17 sends `Accept` and its own `User-Agent`, and the edge refuses Python's default agent (§6). And §6 R5 authorized a stop only on a G-TIERC FAIL, so the G-DEPLOY FAIL left a service sending refused requests from the capture host — the host Tier C reads the venue from — with no route inside the TZ to stop it. Architect's defect, three parts. | **closed 2026-09-23 by TZ-18a**: its §3.4 proved the request path on the host through the service's own request function before the service started, and its §6.1 named the stop, unused under PASS and PASS. Repaired by rule, now **CANON hard rule 14**: **a TZ that starts a long-lived process first issues one live request per endpoint through the process's own request function, asserted served and parsed; fixes every header of that request; and authorizes and names the process's stop on every FAIL of every gate that judges it — by the Boss's hand where the session refuses `kill` — verified from the process's own record.** And: **evidence that the venue serves a request is cited with the whole request that produced it — method, URL and every header.** |
 | 76 | **Five sentences of TZ-18 conflicted, and the Executor read each correctly.** P3 forbade a price in any output file of §8 while §3.7 step 6 required `tz18-verify.csv` to carry both readings of every unit; §3.7 named `/root/tz18-work/tz18-verify.csv` while §6 sent R1 and R6 to `run-1/` and `run-3/`; V10 asked for an assert at every checkpoint and a printed count of violations, which an assert at the first one leaves unprintable; V12 required the branch commit in the `start` record while §3.8 fixed an argv with no place for it; and §3.8's single-instance rule, "that command line is this service's", did not say equal, and the build compares a substring. Architect's defect, five times. | closed by ruling — the report's §6.3 items 1 to 4 are upheld: the output directory from the run with §3.7's file names, the count printed before one final assert, the commit from a `commit.txt` beside the copy. P3's reading is upheld because every reading in that file is already in TZ-17's committed CSV, by Q1 to Q3's own equalities, and all of it lies below the boundary. The substring goes to TZ-18a as a defect (item 77). Repaired by rule, **CANON PART VI C1 as amended in CANON revision `2026-09-23-a`**: the prohibition list is intersected with every output the body requires **by content class — a price, a label, an outcome, a settled document — as well as by path**; and **an identity check a TZ asks an instrument to make on a process is written as equality with the exact argv.** |
-| 77 | **TZ-18's build sent Python's default `User-Agent`, and the venue refused every request it made.** `http_get` builds `urllib.request.Request(url, method="GET")` under a docstring that says "no header but the default agent"; both hosts answer 403 `error code: 1010` (§6), so no document yielded token ids, no book was read, G-DEPLOY read 0 of 14 and no pairing skew exists. **The Executor then broke P2 to diagnose it:** nine requests outside the instrument, among them a live settled fifteen-minute document of `5,462` bytes — outside the `5,008` to `5,103` bytes of every fifteen-minute document of TZ-17's set, which the venue serves byte-stable, so not one of the 801 — whose slug the report does not name; nothing of its body was printed, stored or parsed for a price, and no number anywhere comes from it. **The report omits what its TZ's §8 item 7 required:** the SHA-256, lines and bytes of `tz18-verify.csv`, so no committed artifact anchors that file. **Two defects sit in paths the run never reached:** `http_get` stamps `recv_mono_ns` on a read that produced no reply — its conditional returns the same value on both branches — so `window.json`'s skews would count a failed read; and the single-instance check matches a substring of `/proc/{pid}/cmdline`. And one disclosed departure: a `--verify-tz17` pass at 22:52:52 UTC read the 801 bodies before the branch commit and before R0; its outputs are byte-identical to R1's. The Executor's defects, found in part by its own report and in part by the Architect's audit. | **Rejected: PR #18 closed unmerged.** G-DEPLOY's FAIL stands as the reading of the artifact that ran; G-CHAIN stands, re-derived by the Architect (§4). **TZ-18a carries:** the stop verified from `runtime.jsonl`; the `User-Agent`; both latent fixes; the pre-start request of hard rule 14; G-DEPLOY and G-TIERC re-read under the full load; the three output hashes printed; the diagnostic slug named in its own §0 from the Executor's scripts on the host; and the reclaiming of `/root/tz17-work/` and `/root/tz18-work/` (§3). Repaired by rule: **a TZ's prohibitions bind every request of the session, the Executor's own included — a diagnosis the TZ does not provide for is a BLOCKED report, never a request; and item 54's rule extends to every gated statistic: no pass computes one before the commit that computes it is pushed.** |
+| 77 | **TZ-18's build sent Python's default `User-Agent`, and the venue refused every request it made.** `http_get` builds `urllib.request.Request(url, method="GET")` under a docstring that says "no header but the default agent"; both hosts answer 403 `error code: 1010` (§6), so no document yielded token ids, no book was read, G-DEPLOY read 0 of 14 and no pairing skew exists. **The Executor then broke P2 to diagnose it:** nine requests outside the instrument, among them a live settled fifteen-minute document of `5,462` bytes — outside the `5,008` to `5,103` bytes of every fifteen-minute document of TZ-17's set, which the venue serves byte-stable, so not one of the 801 — whose slug the report does not name; nothing of its body was printed, stored or parsed for a price, and no number anywhere comes from it. **The report omits what its TZ's §8 item 7 required:** the SHA-256, lines and bytes of `tz18-verify.csv`, so no committed artifact anchors that file. **Two defects sit in paths the run never reached:** `http_get` stamps `recv_mono_ns` on a read that produced no reply — its conditional returns the same value on both branches — so `window.json`'s skews would count a failed read; and the single-instance check matches a substring of `/proc/{pid}/cmdline`. And one disclosed departure: a `--verify-tz17` pass at 22:52:52 UTC read the 801 bodies before the branch commit and before R0; its outputs are byte-identical to R1's. The Executor's defects, found in part by its own report and in part by the Architect's audit. | **Rejected: PR #18 closed unmerged.** G-DEPLOY's FAIL stands as the reading of the artifact that ran; G-CHAIN stands, re-derived by the Architect (§4). **TZ-18a carries:** the stop verified from `runtime.jsonl`; the `User-Agent`; both latent fixes; the pre-start request of hard rule 14; G-DEPLOY and G-TIERC re-read under the full load; the three output hashes printed; the diagnostic slug named in its own §0 from the Executor's scripts on the host; and the reclaiming of `/root/tz17-work/` and `/root/tz18-work/` (§3). Repaired by rule: **a TZ's prohibitions bind every request of the session, the Executor's own included — a diagnosis the TZ does not provide for is a BLOCKED report, never a request; and item 54's rule extends to every gated statistic: no pass computes one before the commit that computes it is pushed.** **Closed 2026-09-23 by TZ-18a, item by item:** the stop verified from `runtime.jsonl`, `K_stop` 06:44:00 UTC; P-START served under the fixed `User-Agent`; both latent fixes, D7 and D8; the pre-start request; G-DEPLOY and G-TIERC PASS under the full load; TZ-18's three output hashes printed; the two trees reclaimed. **The diagnostic slug is not recoverable:** no script was ever saved on the host — no `.py` or `.sh` outside `/root/tz18-work/`'s worktrees — the body was never stored, and no number depends on it; the thirty files that remained are preserved unread in `/root/btc-forensics/`. |
+| 81 | **Three smaller defects of TZ-18a, the Architect's.** V4 asked each `diff -u` hunk to map to exactly one D-item, which three lines of context make impossible where two D-items sit three lines apart: 6 of 32 hunks carry two or three. §0.5 presumed the Executor's diagnostic scripts on the host from this map's §3, which had taken them from the TZ-18 report's account of its diagnosis rather than read them; none existed. And §3.4 asked for ten decimals after D2 removed `Decimal`. The report's four additions — `decimals_of`, `parses_json`, `manifest_scan`'s `reason` key and the checkpoint's `sends_stamped` — are what those D-items' own text needs. | closed by ruling — the four additions are upheld: each is pure, reads no value and moves no threshold. Repaired by rule: **a hunk map is stated at `-U0`**; and item 72's rule covers the rest — what the host holds is read on the host by the TZ that states it. |
+| 80 | **TZ-18a's as-of instant fell below a file its own stopping rule had seen.** R3 stopped at the first minute-check at which `E2 = 1790187000`'s manifest existed and set `A = floor(now)`; the recorder had written that manifest in the same second, so its `st_mtime_ns` exceeded `A · 10^9` and D12 excluded it. G-TIERC reached PASS at its minimum on `1790185200` and `1790186100` — the first from a window that was considered and fully loaded though it qualified for no G-DEPLOY unit — and `1790187000`, fully loaded, is unread. `test -e` reads nothing, so the exclusion was blind and biased nothing, but it cost the interlock its third unit. The Architect's defect. | closed by ruling — PASS stands as the rule reads it, and the interlock continues in TZ-16's disclosure (§2.5). Repaired by rule: **an as-of instant is never earlier than an event its stopping condition observed — the check's clock is rounded up, not down — and the proof runs only once the clock is past it.** |
+| 79 | **The TZ-18a report states two figures of its first commit as its last's, and one statistic wrongly.** The file is 1,683 lines and `69,517` bytes at `ca4bbc1`; `69,357` is `9973e44`'s size. The `-U0` diff against `8caa0b4` is 99 blocks at `ca4bbc1`; 97 is `9973e44`'s count, and two of the 99 cross a D-item's stated range — base 75–77, where D6's line 75 meets D3's 76 and 77, and 360–365, two blank lines past D6's 363. And "within 30 ms, 20 of 21": every one of the 21 skews is within 30 ms, and 20 are within 28 ms. The report also never prints R0's count; the instrument prints its V-lines only after all 39 asserts pass, so R0's printed V5 and V7 imply 39 of 39, and the TZ fixed R0's count in §6 with no V-row to carry it. The Executor's defects, with the Architect's share on R0. | closed by ruling — the hash anchors the file, no figure moves a reading, and the committed report is not edited. Repaired by rule, item 74's extended: **after any new commit, every figure a report states about its artifact is recomputed from the head it names**; and **every run whose outcome a TZ fixes has a V-row.** |
+| 78 | **TZ-18a's Executor fixed forward past a BLOCK clause.** §3.4 read "A failed assert in steps 1–7 is BLOCKED, and the service is never started." The first commit, `9973e44`, built `base_rate` with `T0 = p − 300` included — 2,017 slots — and its own assert stopped `--prestart` at step 3, before any manifest was opened or any request made. The Executor pushed `ca4bbc1`, which changes that one expression — 6 insertions and 2 deletions, re-derived by the Architect — ran R1 again and started the service. The report lists it among what could not be implemented as written and does not name the clause it bypassed. The Executor's defect, and it moved no number: no live request ran under `9973e44`, and every gated figure comes from `ca4bbc1` after its push. | closed by ruling — accepted, the diff between the two commits read by the Architect. Repaired by rule: **a clause that reads BLOCKED binds whatever caused the failure, the Executor's own code included; a TZ that wants a defect fixable inside the session says so, before its first venue request only, and requires the copy and R0 repeated on the new commit and both commits disclosed.** |
 | 21 | The TZ-07a report's §2.5 summary carries one `eligible bins` column for two estimators whose eligibility differs — 10 / 9 / 6 / 5 / 2 / 2 uncorrected against 8 / 10 / 9 / 7 / 3 / 2 corrected. The per-tau tables are correct; only the summary is ambiguous, and G2 counts failures over eligible bins. | closed by rule: **a summary table reporting two estimators reports eligibility per estimator.** The committed report is not edited. |
 
 ---
@@ -907,21 +951,23 @@ pricer's at four of five `tau`, and the market's mid beat `p_t` on the Brier sco
 up to 3,600 qualifying slots no one has seen, with an exact test for each answer and a first look at
 2,400.
 
-**The backup track has its structure and no price.** The fifteen-minute market and the five-minute
-market inside it settle on one published number, so their outcomes nest exactly, and a violation of the
-nesting on executable quotes would need no pricer. No capture has stored a fifteen-minute book: the first
-deployment sent Python's default agent, the venue's edge refused every request, and TZ-18a redeploys it.
+**The backup track has its structure, and its books unread.** The fifteen-minute market and the
+five-minute market inside it settle on one published number, so their outcomes nest exactly, and a
+violation of the nesting on executable quotes would need no pricer. Since 2026-09-23 17:39:50 UTC the
+chain book has recorded both markets' books within 30 ms of one another at every checkpoint of its
+proof, and Tier C held under its load; B2, which would read them, waits for TZ-16's first reading.
 
-The recorder is running on `4216c04` with both tiers, pid `228592`, and `/dev/vda2` held
-`13,453,283,328` bytes free at TZ-18's closing read on 2026-09-22. **The consumer is stopped, measured at
+The recorder is running on `4216c04` with both tiers, pid `228592`, the chain book beside it as pid
+`2699889`, and `/dev/vda2` held `13,430,845,440` bytes free at TZ-18a's closing read on 2026-09-23,
+its lowest `13,427,335,168` at that TZ's opening. **The consumer is stopped, measured at
 fifteen reads across eight days**, and headroom is **`88` days** on §6's figure, conditional on that
 service staying disabled.
-Between them the pricers, the recorder and the venue's own documents have produced eleven conclusions —
+Between them the pricers, the recorder and the venue's own documents have produced twelve conclusions —
 the Phase 0 answer, the normal link's Phase 1 answer, the reason for it, the shape of the residual, the
 closure of the Student pricer by an unsized gate, the size of the gate, the Student pricer's Phase 1
 answer under it, the inventory of the book, Phase 2's first reading, undecided, the backup track's first
-answer, and the identity of the reading both families settle on — one deployment proof and one
-deployment that failed on its own build, the measurements of the feed and of the host that §2 and §6
+and second answers, and the identity of the reading both families settle on — two deployment proofs and
+one deployment that failed on its own build, the measurements of the feed and of the host that §2 and §6
 record, and seven written predictions that the data refuted:
 the third on its mechanism rather than its answer, the fourth on one row of five, the fifth on four rows
 of six and, at `tau = 60`, on its direction, the sixth on two rows of seven — the book's two-sidedness
@@ -930,7 +976,8 @@ selection at `tau = 60`, and the gate's power to close anywhere.
 **Three specifications were stopped by the Executor before any measurement existed**, and the eight
 mechanical checks of CANON PART VI exist because of them; every TZ written under those
 checks since has run, and each audit still found defects of the Architect's — eight in TZ-18 alone
-(§7 items 75 and 76). A gate that could close its question in one direction only is why TZ-16 reads
+(§7 items 75 and 76), and five in TZ-18a, none moving a reading (§7 items 79 to 81). A gate that could close its question in one direction only is why TZ-16 reads
 each answer from its own exact test; a deployment that failed and could not be stopped is why a TZ
 that starts a process now proves its request path before it starts and names its stop (CANON hard
-rule 14).
+rule 14); and a fix pushed past a BLOCK clause is why that clause now binds whatever caused the
+failure (§7 item 78).
