@@ -1,0 +1,23 @@
+# btc-5m-twap: the recorder, Tier A and Tier C, as a system unit (TZ-20).
+# Installed byte for byte as /etc/systemd/system/btc-recorder.service.
+[Unit]
+Description=btc-5m-twap recorder, Tier A and Tier C
+Wants=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/root/btc-recorder-svc/research/recorder
+Environment=HOME=/root
+ExecStart=/root/tz04a-env/venv/bin/python -B -u recorder.py
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=0
+MemoryMax=512M
+StandardOutput=append:/var/lib/btc-recorder/recorder.log
+StandardError=append:/var/lib/btc-recorder/recorder.log
+
+[Install]
+WantedBy=multi-user.target

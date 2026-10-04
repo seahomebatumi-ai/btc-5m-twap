@@ -1,0 +1,22 @@
+# btc-5m-twap: the chain book, TZ-18a's service, as a system unit (TZ-20).
+# Installed byte for byte as /etc/systemd/system/btc-chainbook.service.
+[Unit]
+Description=btc-5m-twap chain book, fifteen-minute and five-minute books
+Wants=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/root/tz18a-svc
+ExecStart=/root/tz01-env/venv/bin/python -B -u /root/tz18a-svc/tz18a-chainbook-capture.py --serve
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=1 2 3
+MemoryMax=192M
+StandardOutput=append:/var/lib/btc-chainbook/service.log
+StandardError=append:/var/lib/btc-chainbook/service.log
+
+[Install]
+WantedBy=multi-user.target
