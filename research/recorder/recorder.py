@@ -5,6 +5,10 @@ TZ-05a adds Tier C to the same process: seven order-book snapshots per interval 
 issued as plain GETs to the public CLOB endpoint and stored exactly as returned. It also
 applies TZ-05a section 5 R-b, which rejects an invalid SNTP reply at the point of reception.
 
+TZ-21 bounds what the process holds in memory: a runtime record that no slice served from
+memory can read again is forgotten, and a window older than what memory holds is sliced from
+runtime.jsonl on disk, record for record, so every slice is the one it always was.
+
 Read-only by construction. There is no order path, no CLOB authentication, no wallet, key,
 signer or credential anywhere in this file, and no pricing arithmetic: frames are routed by
 topic and written byte-for-byte as received.
@@ -35,6 +39,7 @@ S7_POLL_S = 15
 RECV_TIMEOUT_S = 30         # no frame for this long means the socket is dead
 NTP_BURST = 4               # SNTP queries per server per round; the lowest-delay reply is kept
 QUOTE_TIMEOUT_S = 8         # shorter than the 20 s between the two closest Tier C checkpoints
+RUNTIME_KEEP_S = 7200       # a live window is sliced by T0 + S7_DEADLINE_S plus one last poll
 
 
 def log(msg):
@@ -225,21 +230,56 @@ class Recorder:
         self.stop_reason = None
         self.sha = git_sha()
         self.runtime_path = os.path.join(config.ROOT, "runtime.jsonl")
-        self.runtime = []            # every runtime record, including earlier processes'
+        self.runtime = []            # the runtime records a slice served from memory can read
+        self.runtime_from_ns = 0     # older clock samples and disconnects are on disk only
         self.last_rx_ns = 0          # the last moment anything arrived on the socket
 
     # ---- runtime log -------------------------------------------------------------
 
-    def load_runtime(self):
-        """Earlier processes' records, so a slice spanning a restart is still whole."""
+    def load_runtime(self, now_ns=None):
+        """Earlier processes' records that memory must hold, read off disk once.
+
+        The file keeps every record. A window older than runtime_from_ns is sliced from the
+        file itself (write_runtime_slice), so a slice spanning a restart is still whole.
+        """
+        now_ns = time.time_ns() if now_ns is None else now_ns
+        self.runtime_from_ns = now_ns - RUNTIME_KEEP_S * 10 ** 9
+        for rec in self.runtime_file_records():
+            if self.kept(rec):
+                self.runtime.append(rec)
+
+    def runtime_file_records(self):
+        """Every record on disk, in file order, parsed as load_runtime has always parsed them."""
         if not os.path.exists(self.runtime_path):
             return
         with open(self.runtime_path, "rt", encoding="utf-8") as fh:
             for line in fh:
                 try:
-                    self.runtime.append(json.loads(line))
+                    rec = json.loads(line)
                 except ValueError:
-                    pass
+                    continue
+                yield rec
+
+    def kept(self, rec):
+        """False only for a clock sample taken, or a disconnect ended, before runtime_from_ns.
+
+        No window that write_runtime_slice serves from memory reads either of them.
+        """
+        if not isinstance(rec, dict):
+            return True
+        if rec.get("kind") == "clock":
+            key = rec.get("recv_ns")
+        elif rec.get("kind") == "disconnect":
+            key = rec.get("end_recv_ns")
+        else:
+            return True
+        return not isinstance(key, int) or key >= self.runtime_from_ns
+
+    def prune_runtime(self, now_ns=None):
+        """Forget what no slice served from memory can read again (RUNTIME_KEEP_S)."""
+        now_ns = time.time_ns() if now_ns is None else now_ns
+        self.runtime_from_ns = max(self.runtime_from_ns, now_ns - RUNTIME_KEEP_S * 10 ** 9)
+        self.runtime = [r for r in self.runtime if self.kept(r)]
 
     def record(self, rec):
         self.runtime.append(rec)
@@ -336,6 +376,7 @@ class Recorder:
                 os.remove(src)
         await self.fetch_s7(t0, path)
         self.write_runtime_slice(t0, path)
+        self.prune_runtime()
         doc = manifest.write(path)
         log("closed %d complete=%s quotes_complete=%s msgs=%s" % (
             t0, doc["complete"], doc["quotes_complete"],
@@ -485,7 +526,9 @@ class Recorder:
         out = [{"kind": "recorder", "recv_ns": r["recv_ns"], "sha": r["sha"]} for r in active]
         if not out:
             out = [{"kind": "recorder", "recv_ns": lo, "sha": self.sha}]
-        for rec in self.runtime:
+        # A window older than what memory holds is read back off disk, in the same order.
+        source = self.runtime if lo >= self.runtime_from_ns else self.runtime_file_records()
+        for rec in source:
             if rec.get("kind") == "disconnect":
                 if rec["start_recv_ns"] <= hi and rec["end_recv_ns"] >= lo:
                     out.append(rec)
