@@ -1,0 +1,22 @@
+# btc-5m-twap: the pair book, B3's capture of the nested pair's four books, as a system unit (TZ-26).
+# Installed byte for byte as /etc/systemd/system/btc-pairbook.service.
+[Unit]
+Description=btc-5m-twap pair book, the nested pair's four books streamed
+Wants=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/root/btc-pairbook-svc
+ExecStart=/root/tz04a-env/venv/bin/python -B -u /root/btc-pairbook-svc/tz26-nesting-b3-capture.py serve
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=1 2 3
+MemoryMax=128M
+StandardOutput=append:/var/lib/btc-pairbook/service.log
+StandardError=append:/var/lib/btc-pairbook/service.log
+
+[Install]
+WantedBy=multi-user.target
