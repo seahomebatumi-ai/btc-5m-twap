@@ -1,0 +1,17 @@
+# btc-5m-twap: the pair book's archive, its closed windows' stream files moved verbatim to a Release (TZ-28).
+# Started by btc-pairbook-archive.timer alone; installed byte for byte as /etc/systemd/system/btc-pairbook-archive.service.
+[Unit]
+Description=btc-5m-twap pair book archive, the stream files of closed windows to a Release
+Wants=network-online.target
+After=network-online.target time-sync.target btc-pairbook.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/lib/btc-pairbook-archive
+ExecStart=/root/tz04a-env/venv/bin/python -B -u /root/btc-pairbook-archive-svc/tz28-pairbook-archive-timer.py run
+Restart=no
+TimeoutStartSec=21600
+Nice=19
+MemoryMax=128M
+StandardOutput=append:/var/lib/btc-pairbook-archive/archive.log
+StandardError=append:/var/lib/btc-pairbook-archive/archive.log
