@@ -1,0 +1,13 @@
+# btc-5m-twap: the pair book's archive, daily at 03:00:20 UTC and 600 s after the timer starts (TZ-28).
+# Installed byte for byte as /etc/systemd/system/btc-pairbook-archive.timer; its stop is systemctl disable --now.
+[Unit]
+Description=btc-5m-twap pair book archive, once a day
+
+[Timer]
+OnCalendar=*-*-* 03:00:20 UTC
+OnActiveSec=600
+AccuracySec=1s
+Unit=btc-pairbook-archive.service
+
+[Install]
+WantedBy=timers.target
