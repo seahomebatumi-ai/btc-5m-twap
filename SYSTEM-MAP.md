@@ -1,6 +1,6 @@
 # SYSTEM MAP — btc-5m-twap
 
-**Revision 2026-10-23-a.** Written by the Architect; the Executor never edits it. This is a
+**Revision 2026-10-27-b.** Written by the Architect; the Executor never edits it. This is a
 **state** document: what exists right now. It holds no mission, no rules and no history.
 
 - The CANON (Architect's project instructions, not in this repository) holds the mission, the
@@ -15,7 +15,7 @@
 Every TZ header states the required revision string and the anchors below. The Executor compares
 before doing any work; a mismatch is BLOCKED.
 
-**Revision string:** `2026-10-23-a`
+**Revision string:** `2026-10-27-b`
 
 | anchor | value |
 |---|---|
@@ -92,8 +92,9 @@ scored are TZ-23's, by TZ-23's own functions. **PR #29 moved no anchor:** it add
 and changed no path, merged at `d973ff1`, and TZ-30 scored no pricer: it executed `pfair.py` for one function,
 `price_to_beat`, the strike's rule, beside `analyze.reports`, and stated `A6` so that what was read is not in doubt.
 **PR #30 moved no anchor:** it added `research/tz31-who-earns.py` and changed no path, merged at `7e08b79`, and TZ-31
-read no pricer; the sums it scored are TZ-23's, by TZ-23's own functions. **TZ-32 moves no anchor:** it adds one file on
-its branch and reads no pricer; the money it scores is TZ-23's, by TZ-23's own functions.
+read no pricer; the sums it scored are TZ-23's, by TZ-23's own functions. **PR #31 moves no anchor:** it adds
+`research/tz32-our-quoting.py` and changes no path, and TZ-32 read no pricer; the money it scored is TZ-23's, by TZ-23's
+own functions.
 
 ### Fingerprint table
 
@@ -133,6 +134,7 @@ printed here or the run is BLOCKED. `tracked` rows are reported with no expectat
 | `research/tz29-maker-m0-second-look.py` | 1,225 | 68,959 | frozen | `18defff93d08c13ea4638a518c88a3fec5541fcf53fb6827451e727f2204d905` |
 | `research/tz30-nesting-b3-measure.py` | 2,518 | 131,119 | frozen | `93dbbf1c4f84553a7bc041387ef92c3c0d8747c384d383b4fcd0b247fcd131ab` |
 | `research/tz31-who-earns.py` | 1,523 | 84,775 | frozen | `7073188c8fbaa19568e8c6e4d6379e40ea57cf2a1341ebde0ea6a08f2c544765` |
+| `research/tz32-our-quoting.py` | 2,576 | 138,209 | frozen | `6ec367e6ed995b315063d2d808dd6a3995878011afd76abfbb7b106b645a9c61` |
 | `research/recorder/recorder.py` | 651 | 27,821 | frozen | `0f6c90451cbd56c808392048e8c4e69ac177fc0237cadaefd4ab8bf579d252f7` |
 | `research/recorder/config.py` | 112 | 4,773 | frozen | `8111dfe473ee694fbe295cabd5fb47a8c9e56ac032ffebf42fd0167964e6181d` |
 | `research/recorder/manifest.py` | 254 | 10,002 | frozen | `79c99010a1c3e035a982a8c64dcf92afaf3ec956e3c3c4a2d354345dedb14045` |
@@ -211,20 +213,26 @@ eight blocks are written in it and nowhere else.
 `tz31-who-earns.py` is frozen for W0's reading, W-EARN, which opened W1 (§4, §5): the makers' rows of a market — its
 full feed less its takers' rows, as multisets — each wallet's own position from its rows with their side flipped, the two
 named groups' sums over each market's life and the fetch held to the idle stretch are written in it and nowhere else.
-**Every one of the forty-two file rows above was read byte for byte by the Architect on 2026-10-24**, by fetching the
-public repository and hashing each path at `origin/main` `7e08b7996a3504a88536e7a9cfcf3c48083c7837`, PR #30's merge —
-**42 of 42 equal to the values printed here, lines and bytes included**, the 40 `frozen` rows and the 2 `tracked`
-ones; the TZ-31 report's own `fingerprint` found the 39 `frozen` rows it carried equal, and the file PR #30 added is
-byte-identical to TZ-31's Appendix A, `7073188c…`. **TZ-32's file, `research/tz32-our-quoting.py`, is on its branch
-only** and enters this table in the revision that follows the merge of its pull request.
+`tz32-our-quoting.py` is frozen for W1's reading, W1-NO-EARN, which closed the W track (§4, §5): the replay of a
+five-minute leg's streams at venue time — its Up book rebuilt from the stored frames, a match read from the Up token's
+own book frame of the same stamp, our quotes queued at their level, filled by a match's sweep or, once the 150 ms
+taker delay has passed, by an order that crosses them, refused where they would cross, cancelled through a one-way
+latency — under nine variants is written in it and nowhere else.
+**Every one of the forty-three file rows above was read byte for byte by the Architect on 2026-10-27**, by fetching
+the public repository and hashing each path — the forty-two at `origin/main` `61f9e51266d245e352778d4794e162a0c6ab1c45`,
+the TZ-32 report's commit, and `research/tz32-our-quoting.py` at PR #31's head
+`b601f756edea59adf536d7ef05226d6f06bcef13`, the one file its merge adds — **43 of 43 equal to the values printed here,
+lines and bytes included**, the 41 `frozen` rows and the 2 `tracked` ones; the TZ-32 report's own `fingerprint` found
+the 40 `frozen` rows it carried equal, and the file PR #31 adds is byte-identical to TZ-32's Appendix A, `6ec367e6…`.
 
-**Revision `2026-10-22-a` reached `main` at `efae20d` and is confirmed there**, as §7 item 18's rule requires of
-every upload: SHA-256 `0e6636b453ed842401dc2013475d23c59cffd36aa9d9fb9934b7dbd82a5f8bfe`, 1,580 lines, 371,311 bytes,
-the revision TZ-31 was gated against and read. `CryptoTZ/TZ-31-who-earns.md` landed at `334cd7c`, SHA-256
-`711a59cbafb94fe13ad7c5281d3e49fb373445fcc5f5c7a37f8016be37d5809a`, 2,297 lines, 157,773 bytes — the copy TZ-31's
-execution read: its §0.1 extraction printed Appendix A's `7073188c…` from it. **This revision ships with TZ-32 in one
-upload.** It is paired with CANON revision `2026-10-23-a`, which lives in the Architect's project instructions and not
-here.
+**Revision `2026-10-23-a` reached `main` at `45f112c` and is confirmed there**, as §7 item 18's rule requires of
+every upload: SHA-256 `594b43669de612fc61f51cd80361c6c245b3941794fc7f067e045fa63f28f55f`, 1,617 lines, 385,135 bytes,
+the revision TZ-32 was gated against and read. `CryptoTZ/TZ-32-our-quoting.md` landed at `ade6d9c`, SHA-256
+`9f6415feaf447a0040a9c5aae5bcbe99a13deeea01fac5e6a9e2e1ab489ea4ce`, 3,451 lines, 222,764 bytes — the copy TZ-32's
+execution read: its §0.1 extraction printed Appendix A's `6ec367e6…` from it. **This revision ships with the merge of
+PR #31, and with no TZ.** It is paired with CANON revision `2026-10-27-c`, which lives in the Architect's project
+instructions and not here; revision `2026-10-27-a`, written the same day for the same merge, differed from this one
+only in its pairing and in the L track (§5), and is superseded unread by any TZ.
 
 ---
 
@@ -244,11 +252,12 @@ entered git history. A bare clone of it is one pack of `2,785` KiB, `719` object
 | `deploy/systemd/` | the captures' systemd units and the archive's service and timer, Executor → branch + PR, installed byte for byte under `/etc/systemd/system/` — the recorder's and the chain book's on `main` since PR #21's merge, the pair book's since PR #25's, the archive's two since PR #27's |
 | root | `SYSTEM-MAP.md`, `BTC-EXECUTOR-INSTRUCTIONS.md`, `.gitignore` |
 
-**Branches on `origin`, read with `git ls-remote` on 2026-10-24 at 02:39 UTC as §7 item 55 requires.** `origin`
-carries **nine branches**: `refs/heads/main` at `7e08b7996a3504a88536e7a9cfcf3c48083c7837`, equal to `HEAD` —
-PR #30's merge, 2026-10-23 18:31:00 UTC, whose first parent `37e78e9` is the TZ-31 report, 13:09:06 UTC, whose
-parent `334cd7c` uploaded TZ-31's specification at 2026-10-22 15:06:15 UTC above `efae20d`, revision `2026-10-22-a`,
-15:05:17 UTC, above `d973ff1`, PR #29's merge of 2026-10-22 08:31:35 UTC; `refs/heads/tz-23-maker-m0` at `7f5ae3f`,
+**Branches on `origin`, read with `git ls-remote` on 2026-10-27 at 09:00 UTC as §7 item 55 requires.** `origin`
+carries **ten branches**: `refs/heads/main` at `61f9e51266d245e352778d4794e162a0c6ab1c45`, equal to `HEAD` — the
+TZ-32 report, 2026-10-27 07:54:05 UTC, whose parent `45f112c` is revision `2026-10-23-a`, 2026-10-24 06:46:08 UTC,
+above `ade6d9c`, TZ-32's specification, 06:44:02 UTC, above `7e08b79`, PR #30's merge of 2026-10-23 18:31:00 UTC,
+whose first parent `37e78e9` is the TZ-31 report and whose second `404288f` its head; `refs/heads/tz-32-our-quoting`
+at `b601f75`, PR #31's head, open; `refs/heads/tz-23-maker-m0` at `7f5ae3f`,
 PR #23's head; `refs/heads/tz-24-nesting-b2` at `6f045cf`, PR #24's head; `refs/heads/tz-26-nesting-b3-capture` at
 `e8b46a8`, PR #25's head; `refs/heads/tz-27-pairbook-archive` at `bce5a85`, PR #26's head;
 `refs/heads/tz-28-pairbook-archive-timer` at `d8194fd`, PR #27's head; `refs/heads/tz-29-maker-m0-second-look` at
@@ -258,7 +267,8 @@ PR #23's head; `refs/heads/tz-24-nesting-b2` at `6f045cf`, PR #24's head; `refs/
 when PR #18 was closed unmerged, and `tz-17-settlement-chain` after PR #17's merge, as `tz-15-phase2-gate`,
 `tz-14-quote-inventory`, `tz-13-sized-gate-test3`, `tz-12-sized-gate`, `tz-11a-student-link` and
 `tz-09-disk-inventory` were before them. **Every commit any artifact names is still served**, as
-`refs/pull/NN/head`: `30` = `404288f` — the commit TZ-31 built, which both lines of its label ledger name — `29` =
+`refs/pull/NN/head`: `31` = `b601f75` — the commit TZ-32 built, which both lines of its label ledger name — `30` =
+`404288f` — the commit TZ-31 built, which both lines of its label ledger name — `29` =
 `fcd9ca5` — the commit TZ-30 built, which every line of its label ledger names — `28` =
 `f6425f7` — the commit TZ-29 built, which both lines of its label ledger name — `27` =
 `d8194fd` — the commit TZ-28 built, which the archive's timer runs and on which every
@@ -269,18 +279,22 @@ the commit TZ-24 built — `23` = `7f5ae3f` — the commit TZ-23 built — `22` 
 `ca4bbc1`, `18` = `8caa0b4`, `17` = `8f1bc93`, `16` = `f7f171a`, `15` = `ffef5cd`, `14` = `7ef9723`, `13` = `6dc0e24`,
 `12` = `2746518`, `11` = `d34606e`, `10` = `e45f38e`, `9` = `e2625ea`, `8` = `26bbb61`, `7` = `c44af68`,
 `6` = `5ed667a`, `5` = `4216c04` — the commit the capture ran from 2026-09-12 to TZ-21's restart — `4` = `0e13a5c`,
-`3` = `ee2f632`, `2` = `3895356` and `1` = `d9e58e8`; no `refs/pull/*/merge` is served. **Twenty-one tags:**
+`3` = `ee2f632`, `2` = `3895356` and `1` = `d9e58e8`; `refs/pull/31/merge` is served while PR #31 is open, at
+`acc970d`, and no other `refs/pull/*/merge`. **Twenty-nine tags:**
 `refs/tags/tz-01a-dataset`, an annotated object `d3251aa` peeling to `ea9290b`; `refs/tags/tz-27-pairbook-streams`, an
-annotated object `e299d4e45f48b7efaa8cb18bd54b139fc0627630` peeling to `bce5a85`; and **nineteen lightweight tags
+annotated object `e299d4e45f48b7efaa8cb18bd54b139fc0627630` peeling to `bce5a85`; and **twenty-seven lightweight tags
 `refs/tags/pairbook-streams-<A>`, one a run of the archive, each at `d8194fd5b6374140b0052a0aa7b0c10fe7ee6ac3`**:
 `1791731892` (TZ-28's first run), `1791774020`, `1791860420`, `1791946820`, `1792033220`, `1792045110`, `1792119620`,
 `1792206020`, `1792226137`, `1792292420`, `1792378820`, `1792446859`, `1792465220`, `1792495417`, `1792551620`,
-`1792618744`, `1792638020`, `1792650248` and `1792724420` (§2.5) — sixty-three ref lines in all, `HEAD` and both
-annotated tags' peeled lines among them, and one more each run of the archive that finds a set. No `tz-11`, no `tz-16`,
-no `tz-19`, no `tz-22`, no `tz-25` and no `tz-32` branch exists anywhere. The head of `main` is never a gate; commits are named where they matter.
+`1792618744`, `1792638020`, `1792650248`, `1792724420`, `1792810820`, `1792850109`, `1792897220`, `1792908757`,
+`1792930875`, `1792983620`, `1793070020` and `1793082340` (§2.5) — seventy-four ref lines in all, `HEAD`, both
+annotated tags' peeled lines and PR #31's merge ref among them, and one more each run of the archive that finds a set;
+PR #31's merge adds no branch and no tag. No `tz-11`, no `tz-16`, no `tz-19`, no `tz-22` and no `tz-25` branch
+exists anywhere. The head of `main` is never a gate; commits are named where they matter.
 
 | pull request | head | disposition |
 |---|---|---|
+| PR #31 | `b601f75` | W1, our quoting: the instrument `research/tz32-our-quoting.py` — `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `fetch`, `replay`, `rescore`, `score` and `reclaim`; TZ-23's documents, `qualify`, `aggregate`, thresholds, reading and labels loaded by their bytes; the replay of a five-minute leg's streams at venue time under nine variants, the units held to the pair book's idle stretch and downloaded from the archive's Releases; 74 self-test checks. **Open**; the Architect's verdict of 2026-10-27 is ACCEPTED, and its merge ships with this revision. One file, 2,576 lines, no other path changed, no anchor moved. |
 | PR #30 | `404288f` | W0, who earns: the instrument `research/tz31-who-earns.py` — `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `fetch`, `constants`, `score` and `reclaim`; TZ-23's walk, feeds, positions, rebate, thresholds, reading and labels loaded by their bytes, the makers' rows of a market as its full feed less its takers', each wallet's own position from its flipped rows, the two named groups' sums over each market's life and the pools beside them, the fetch held to the pair book's idle stretch; 58 self-test checks. **Merged 2026-10-23** into `main` at `7e08b79` after the Architect's verdict, ACCEPTED; the branch is kept on `origin`. One file, 1,523 lines, no other path changed, no anchor moved. |
 | PR #29 | `fcd9ca5` | B3's measurement: the instrument `research/tz30-nesting-b3-measure.py` — `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `fetch`, `strikes`, `score`, `rescore` and `reclaim`; TZ-24's set walk, pair arithmetic and readers and TZ-14's fee and touch loaded by their bytes, every window's streams downloaded from the archive's Releases and replayed at venue time through one capture rule, every book rebuilt and compared with the stored replies, the strikes from the recorder's feed, the reading over eight blocks; 42 self-test checks. **Merged 2026-10-22** into `main` at `d973ff1` after the Architect's verdict, ACCEPTED; the branch is kept on `origin`. One file, 2,518 lines, no other path changed, no anchor moved. |
 | PR #28 | `f6425f7` | M0's second look: the instrument `research/tz29-maker-m0-second-look.py` — `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `replay`, `fetch`, `constants`, `score` and `reclaim`; TZ-23's walk, fetch, sums, thresholds and reading loaded by their bytes, the first look read from the forensic store, the sum over both looks, every request held to the pair book's idle stretch; 51 self-test checks. **Merged 2026-10-20** into `main` at `33ec8e3` after the Architect's verdict, ACCEPTED; the branch is kept on `origin`. One file, 1,225 lines, no other path changed, no anchor moved. |
@@ -363,28 +377,33 @@ TZ-28 report; `f6ab6e5` — PR #27's merge; `bdde72f` — the upload of TZ-29's 
 revision `2026-10-19-a`, and the base TZ-29 built on; `f6425f7` — the commit TZ-29 built, which both lines of its label
 ledger name; `4f17913` — the TZ-29 report; `33ec8e3` — PR #28's merge; `f05e16e` — the upload of TZ-30's
 specification; `c836913` — the upload of revision `2026-10-20-a`, and the base TZ-30 built on; `fcd9ca5` — the commit
-TZ-30 built, which every line of its label ledger names; `5e384de` — the TZ-30 report; `d973ff1` — PR #29's merge, and
-the state the rows of §0 were read at.
+TZ-30 built, which every line of its label ledger names; `5e384de` — the TZ-30 report; `d973ff1` — PR #29's merge;
+`efae20d` — the upload of revision `2026-10-22-a`; `334cd7c` — the upload of TZ-31's specification, and the base
+TZ-31 built on; `404288f` — the commit TZ-31 built, which both lines of its label ledger name; `37e78e9` — the TZ-31
+report; `7e08b79` — PR #30's merge; `ade6d9c` — the upload of TZ-32's specification; `45f112c` — the upload of
+revision `2026-10-23-a`, and the base TZ-32 built on; `b601f75` — the commit TZ-32 built, which both lines of its
+label ledger name; `61f9e51` — the TZ-32 report, and the state the rows of §0 were read at.
 
 **Tags:** `tz-01a-dataset` → `ea9290b92b9fa50c22d0560d5d01dfa392af44df`; `tz-27-pairbook-streams` →
-`bce5a85be7850a33f95192265b916cc9c5e0aaf1`, the Release `409534533`; and the eighteen `pairbook-streams-<A>` →
+`bce5a85be7850a33f95192265b916cc9c5e0aaf1`, the Release `409534533`; and the twenty-seven `pairbook-streams-<A>` →
 `d8194fd5b6374140b0052a0aa7b0c10fe7ee6ac3`, lightweight, among them the first run's Release `409746510` and the first
 calendar run's `410101186` (§2.5).
 
-A read-only mirror of this map also sits in the Architect's project files. The repository copy is
-the authority; the mirror is never edited and never quoted as state.
+No copy of this map is kept anywhere but here: the Architect reads it from the repository (CANON PART III).
 
-**Files on `main`:** forty TZ files (`TZ-01` … `TZ-30`; no `TZ-22` exists yet, and `TZ-25` was never issued), forty
-reports, twenty-eight `research/` scripts, six `research/recorder/` files, five `deploy/systemd/` units — four services
-and one timer — two governance files, `.gitignore` — **122 paths**, `7,658,893` bytes, counted by the Architect with
-`git ls-tree -r` on `origin/main` at `d973ff1`: 40 under `CryptoReports/`, 40 under `CryptoTZ/`, 34 under `research/`, 5
-under `deploy/` and 3 at the root; no `.parquet`, `.zip`, `.gz`, `.jsonl` or `.csv`. **Ten of the forty reports are BLOCKED reports**, each by its own status
+**Files on `main`:** forty-two TZ files (`TZ-01` … `TZ-32`; no `TZ-22` exists yet, and `TZ-25` was never issued),
+forty-two reports, twenty-nine `research/` scripts, six `research/recorder/` files, five `deploy/systemd/` units — four
+services and one timer — two governance files, `.gitignore` — **127 paths**, `8,658,002` bytes, counted by the Architect
+with `git ls-tree -r` on `origin/main` at `61f9e51`: 42 under `CryptoReports/`, 42 under `CryptoTZ/`, 35 under
+`research/`, 5 under `deploy/` and 3 at the root; no `.parquet`, `.zip`, `.gz`, `.jsonl` or `.csv`. PR #31's merge makes
+them **128 paths** and `8,796,211` bytes, 36 under `research/`. **Ten of the forty-two reports are BLOCKED reports**, each by its own status
 line and each one file in one commit: TZ-04 at `28e4444`, TZ-04a at `3eead29`, TZ-05 at `0e13a5c`, TZ-07 at `8377180`,
 TZ-08 at `2fab92a`, TZ-10 at `1fcd19f`, TZ-10a at `d015d3c`, TZ-11 at `0b080c1`, TZ-16 at `a9e0b45` and TZ-19 at
 `b96be84`, re-read on 2026-10-11; the TZ-23 report reads UNDECIDABLE by its own first line, the TZ-24 report
 VIOLATION by its own, the TZ-26 report P-START served and every gate PASS by its first lines, the TZ-27 report
 P-PATH served and every gate PASS by its, the TZ-28 report G-TZ27, P-PATH, P-TOKEN and every gate PASS by its, and the
-TZ-29 report NO EARN over both looks by its own, and the TZ-30 report NO CAPTURE by its own.
+TZ-29 report NO EARN over both looks by its own, the TZ-30 report NO CAPTURE by its own, the TZ-31 report W-EARN by its
+own, and the TZ-32 report W1-NO-EARN by its own.
 For the last five BLOCKED no branch and no pull request exists, and no `research/` file moved
 (§7 item 73).
 
@@ -509,6 +528,7 @@ records (§6, memory).
 | TZ-29 | — | — | **no capture file opened.** Its sets are the venue's public documents and fills — M0's second look, the first 4,032 qualifying five-minute markets with `T0 > 1791241800`, `1791242100` … `1792451400`, through gamma `/markets` and Data API v2 — and the first look's six files in the forensic store. Its §0.3 `df`, `find` and `grep -c`, at both runs, and B-RECLAIM-OWN's `df` touched the recorder's root and read no body; `du -sb` read the sizes of the pair book's store and the archive's state, and `I archive` read `ledger.jsonl` alone of that state. Every mode printed `opens refused: 0`. **Nothing under `/var/lib/btc-chainbook/` or `/var/lib/btc-pairbook/` opened** |
 | TZ-30 | the pair book's windows `1791706500` … `1792548000`, B3's candidates, and their five-minute legs | 936, of them 775 walked for the set | **Under `/var/lib/btc-pairbook/`, read only, by the instrument alone:** `window.json` of the 936 candidates by `fetch`, and `window.json` and `books.jsonl.gz` of the 768 members by `score` and of 48 of them by `rescore`; no stream file opened and nothing listed — the members' streams were downloaded from the archive's Release assets, each verified by its set's bytes and SHA-256 and removed after its replay. **Under the recorder's root:** `twap60` of `btc-updown-5m/<T>` and `<T+600>` of each candidate walked, by `strikes` alone, twice — the strikes. Its §0.3 `df`, `find` and `grep -c`, at both runs, and B-RECLAIM-OWN's `df`. The settled documents of all 936 windows' two markets through gamma `/markets`, for the set rule. Every mode printed `refused: 0`. **Nothing under `/var/lib/btc-chainbook/`** |
 | TZ-31 | — | — | **no capture file opened.** Its set is the venue's public documents and fills — W0, the first 1,008 qualifying five-minute markets after `1792451400`, `1792451700` … `1792753800`, through gamma `/markets` and Data API v2 — and its rehearsal's the formation's last 144, read by TZ-29. Its §0.3 `df`, `find` and `grep -c`, at both runs, and B-RECLAIM-OWN's `df` touched the recorder's root and read no body; `du -sb` read the sizes of the pair book's store and the archive's state, and `I archive` and `I still` read `ledger.jsonl` alone of that state. Every mode printed `opens refused: 0`. **Nothing under `/var/lib/btc-pairbook/` or `/var/lib/btc-chainbook/`** |
+| TZ-32 | the pair book's windows `1792754100` … `1793068200`, W1's 350 candidates | 289 walked for the set | **no file of this capture opened.** Its §0.3 `df`, `find` and `grep -c`, at both runs, and B-RECLAIM-OWN's `df` touched the recorder's root and read no body. **Under `/var/lib/btc-pairbook/`, read only, by `I fetch` alone:** `window.json` of the 350 candidates; no stream file opened and nothing listed — the 288 members' streams were downloaded from the archive's Release assets, each verified by its bytes and SHA-256, replayed and removed inside its unit, and 18 of them again by `rescore`. `du -sb` read the sizes of the pair book's store and the archive's state, and `I archive`, `I fetch` and `I still` read `ledger.jsonl`, and `I archive` and `I fetch` every complete run's `set.json`, alone of that state. The settled documents of the 300 legs it requested through gamma `/markets`. Every mode printed `opens refused: 0`. **Nothing under `/var/lib/btc-chainbook/`** |
 
 **Tier C has been scored twice:** by TZ-15, on TZ-14's 1,200 intervals, and by TZ-16a, on the first
 2,400 qualifying slots after `1789669800`. **The reserve is released, 2026-10-04:** the second look TZ-16a §4.2 pre-registered is withdrawn unrun
@@ -701,9 +721,11 @@ chain book since 2026-09-23, and TZ-24 read them up to `1791241200`** — the co
 the venue's settled documents (§2.5); the later ones are unread. **Since 2026-10-10 19:30:06 UTC the pair book
 streams every change of the four books of each nested pair, beside the same seven checkpoints**, and **TZ-30 read the
 streams and stored books of B3's 768 members, `1791706500` … `1792403100`**, and the `window.json` of its 936
-candidates to `1792548000`; no TZ has read a stream or a stored book of a later window, and the Architect read the
-streams of `1792404000` … `1792722600` for TZ-32's rule, every five-minute leg of them one of M0's or W0's markets —
-nothing of a window at or after `1792723500` (§2.5).
+candidates to `1792548000`; the Architect read the streams of `1792404000` … `1792722600` for TZ-32's rule, every
+five-minute leg of them one of M0's or W0's markets; **TZ-32 read the streams of W1's 288 members, `1792754100` …
+`1793013300`**, and the `window.json` of its 350 candidates to `1793068200`; and the Architect's audit of it read the
+streams of the 289 windows it considered. **No TZ and no Architect has read a stream or a stored book of a window after
+`1793013300`** (§2.5).
 
 ### 2.5 The fifteen-minute market, the chain book and the pair book
 
@@ -835,10 +857,12 @@ start of the timer **with no boot**: one boot since 2026-08-02 07:24:34 UTC (§7
 streams and stored books of B3's 768 members**, `1791706500` … `1792403100` (§2.3), and B3 is closed. **Reserved from
 its first byte, on Tier C's terms — on the host and in every Release asset made from it:** no TZ but one that scores it
 extracts a price, size, side, book hash or outcome from a body stored under `/var/lib/btc-pairbook/` or from such an
-asset, and no other report prints one; **no TZ has read a window after `1792403100`; the Architect read
-`1792404000` … `1792722600` for TZ-32's rule, every five-minute leg of them one of M0's or W0's markets, whose fills TZ-29
-and TZ-31 had read; and the windows from `1792723500` are unread** — W1 reads the first 288 qualifying from
-`1792754100` (TZ-32; §5). A file's bytes and SHA-256 are not its content: TZ-27 and the archive's runs hash and move the
+asset, and no other report prints one; **the Architect read `1792404000` … `1792722600` for TZ-32's rule, every
+five-minute leg of them one of M0's or W0's markets, whose fills TZ-29 and TZ-31 had read; TZ-32 read W1's 288 members,
+`1792754100` … `1793013300`, and the Architect's audit of it the 289 windows it considered; the 34 windows `1792723500`
+… `1792753200`, W0's legs, are unread, and so is every window after `1793013300`** (§5). Since 2026-10-23 the archive
+ran eight times, every run `complete` — four on its calendar and four off it, `1792850109`, `1792908757`, `1792930875`
+and `1793082340` — and its assets reach window `1793080800` (TZ-32 report §2.4). A file's bytes and SHA-256 are not its content: TZ-27 and the archive's runs hash and move the
 stream files and decompress none.
 `window.json`, `runtime.jsonl` and `service.log` carry counts, times and token ids and are excepted. Nothing of it
 enters git history. **Every TZ after TZ-26 reads `du -sb /var/lib/btc-pairbook` beside `df`.**
@@ -878,6 +902,7 @@ enters git history. **Every TZ after TZ-26 reads `du -sb /var/lib/btc-pairbook` 
 | `research/tz29-maker-m0-second-look.py` | **M0's second look.** `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `replay`, `fetch`, `constants`, `score` and `reclaim`; it loads `tz23-maker-m0.py` from beside itself, executed from the bytes whose SHA-256 it asserts, and calls TZ-23's `candidates` and `form_set`, `fetch_chunk`, `member_rows`, `build_constants`, `gate_constants`, `score` and `reading` for the walk, every sum, the thresholds and the reading. Its own code is the first look read from the forensic store, the sum over both looks, a fetch whose every chunk is held to the pair book's idle stretch and away from the archive's run — `quiet` and `hold` — and the archive's ledger read and printed, `ledger_summary`. Standard library alone, run under `/root/tz04a-env`; 51 self-test checks. On `main` from PR #28's merge. |
 | `research/tz30-nesting-b3-measure.py` | **B3's measurement.** `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `fetch`, `strikes`, `score`, `rescore` and `reclaim`, run under `/root/tz01-env`, which `tz14` needs. It executes `tz24-nesting-b2.py` from the bytes whose SHA-256 it asserts, and through it `tz14-quote-inventory.py`, whose bytes it asserts first, and calls TZ-24's `form_set` — and through it `chainbook_window`, `window_problem`, `doc_problem` and `identities` — `gamma_cached`, `slug15`, `slug5`, `pairs_of`, `payoff`, `costs`, `classify`, `LEGS`, `read_books` and `line_check`, which parses a reply with TZ-14's `book_of`, and TZ-14's `fee_pp`, `touch_of` and `best_of`; its mode `strikes` executes `pfair.py` and the recorder's `config`, `manifest` and `analyze` the same way, never TZ-24, and calls `analyze.reports`, `analyze.first_at_or_after`, `config.interval_dir` and `pfair.price_to_beat`. It writes no second implementation of any of them. Its own code is the replay of a window's streams at venue time — every book rebuilt, every attempt of the capture rule placed, filled, unwound and settled, G-REBUILD's comparisons against the stored replies — the strikes' receive stamps, the archive's assets and Release downloads, the units held to the idle stretch, the lag, the reading over eight blocks, G-STILL's count of the archive's own restarts, and TZ-29's `quiet`, `hold`, `still`, `scratch` and `reclaim`, written again for its own hook; 42 self-test checks. On `main` from PR #29's merge. |
 | `research/tz31-who-earns.py` | **W0's instrument.** `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `fetch`, `constants`, `score` and `reclaim`, run under `/root/tz04a-env`. It executes `tz23-maker-m0.py` from the bytes whose SHA-256 it asserts and calls TZ-23's `candidates` and `form_set` for the walk, `trades` for both feeds of a market's fills, `aggregate` — and through it `maker_terms` and `rebate` — for every position, cost and rebate, `gate_constants`, `reading` and `label_of`; it writes no second implementation of any of them. Its own code is the makers' rows of a market — the full feed less the takers', as multisets, `split_feeds` — each wallet's own position by TZ-23's `maker_terms` on its side flipped, `own_rows`, the two named groups' sums over each market's life and the pool beside them, the takers' fee, G-STILL with the archive's own restarts read from its ledger, and TZ-29's `quiet`, `hold`, held fetch, `scratch`, `archive` and `reclaim`, written again for its own feeds; 58 self-test checks. On `main` from PR #30's merge. |
+| `research/tz32-our-quoting.py` | **W1's instrument.** `fingerprint`, `selftest`, `still`, `scratch`, `archive`, `rehearse`, `fetch`, `replay`, `rescore`, `score` and `reclaim`, run under `/root/tz04a-env`. It executes `tz23-maker-m0.py` from the bytes whose SHA-256 it asserts and calls TZ-23's `gamma_docs` and `http_json` for every document, `qualify` for every leg, `aggregate` — and through it `maker_terms` and `rebate` — for every position, cost and rebate, `gate_constants`, `reading` and `label_of`; it writes no second implementation of any of them. Its own code is the replay of a window's streams at venue time — `Window`: the five-minute leg's Up book rebuilt from the stored frames, a match read from the Up token's own book frame of the same stamp, `sweep`'s consumption from the best level outward, our quotes queued behind the displayed size or first at `front`, filled by a match or, once the 150 ms taker delay has passed, by a crossing order, refused where they would cross on arrival, cancelled through a one-way latency, the quoting rule in `decide` — under nine `VARIANTS`, two gated; the stream and leg rules over `window.json` and the documents; the downloads from the archive's Releases held to the pair book's idle stretch; `still_reading`'s chain of the archive's restarts; 74 self-test checks. Merged with this revision, from PR #31. |
 | `deploy/systemd/btc-recorder.service`, `deploy/systemd/btc-chainbook.service` | **the two system units**, installed byte for byte under `/etc/systemd/system/`: `Restart=always`, `RestartSec=5`, `StartLimitIntervalSec=3600`, `StartLimitBurst=5`, each process's deliberate exits excluded — `RestartPreventExitStatus=0` for the recorder, `1 2 3` for the chain book — `MemoryMax=512M` and `192M`, output appended to `recorder.log` and `service.log`, `WantedBy=multi-user.target`. On `main` from PR #21's merge. |
 | `deploy/systemd/btc-pairbook.service` | **the pair book's unit**, installed byte for byte under `/etc/systemd/system/` and enabled: the chain book's with 8 of its 22 lines changed — the comments, the description, the working directory, the command line, the two log lines and `MemoryMax=128M` — `Restart=always`, `RestartSec=5`, `RestartPreventExitStatus=1 2 3`, `StartLimitIntervalSec=3600`, `StartLimitBurst=5`, output appended to `/var/lib/btc-pairbook/service.log`, `WantedBy=multi-user.target`. On `main` from PR #25's merge. |
 | `deploy/systemd/btc-pairbook-archive.service`, `deploy/systemd/btc-pairbook-archive.timer` | **the archive's two units**, installed byte for byte under `/etc/systemd/system/`, the timer enabled: the service `Type=oneshot`, `Restart=no`, `TimeoutStartSec=21600`, `Nice=19`, `MemoryMax=128M`, in `/var/lib/btc-pairbook-archive`, its output appended to `archive.log` there, no `[Install]`; the timer `OnCalendar=*-*-* 03:00:20 UTC`, `OnActiveSec=600`, `AccuracySec=1s`, `WantedBy=timers.target`. Its stop is K-28, `systemctl disable --now btc-pairbook-archive.timer`. On `main` from PR #27's merge. |
@@ -893,18 +918,6 @@ enters git history. **Every TZ after TZ-26 reads `du -sb /var/lib/btc-pairbook` 
 `33753b2bb1e322a081e6cba8bad976268e2d6046dc350e6ceae3e748ad6e4bfe`, closed unmerged (§7 item 77), and by
 hash in `/root/btc-forensics/`, where TZ-18a §9 copied the copy its service ran. Its corrected successor
 is `tz18a-chainbook-capture.py`.
-
-**`research/tz32-our-quoting.py` is TZ-32's**, written in its Appendix A and on no branch yet: W1 — `fingerprint`,
-`selftest`, `still`, `scratch`, `archive`, `rehearse`, `fetch`, `replay`, `rescore`, `score` and `reclaim` — run under
-`/root/tz04a-env`. It executes `tz23-maker-m0.py` from the bytes whose SHA-256 it asserts and calls TZ-23's `gamma_docs`
-and `http_json` for every document, `qualify` for every leg, `aggregate` — and through it `maker_terms` and `rebate` —
-for every position, cost and rebate, `gate_constants`, `reading` and `label_of`; it writes no second implementation of
-any of them. Its own code is the replay of a window's streams at venue time — the five-minute leg's Up book rebuilt from
-the stored frames, a match read from the Up token's own book frame of the same stamp, our quotes placed, queued, filled
-by a match's sweep or, once the 150 ms taker delay has passed, by an order that crosses them, refused where they would
-cross on arrival, and cancelled through a one-way latency — under nine variants, two of them gated; the set rule over
-`window.json` and the archive's assets; the downloads and units held to the idle stretch; the constants, the score and
-G-STILL; 74 self-test checks.
 
 Outputs go to `research/out/**`, git-ignored except `twap-divergence-summary.md` and
 `twap-divergence-contamination.md`. **`/root/tz01-out-archive/`, `/root/tz06-work/`,
@@ -1056,6 +1069,17 @@ process `2427892`, is the next TZ's to reclaim (§6, harness) — unless a reboo
 supervision). Two `claude` processes have run since 2026-10-22 13:11:35 UTC, pids `2287221` and `2287231`, remote-control
 bridges with working directories `/root/crypto-auto` and `/root/btc-5m-twap`, and no directory beside a TZ's session was
 born with them; they are not a TZ's, and no TZ touches them.
+**TZ-32 §9 copied 47 more, making `2,044`**, the 1,997 already there unchanged — 46 named by its report and 1 kept by
+name — copying nothing of its branch worktree, which held exactly its pushed `HEAD`. Its B-RECLAIM-SCRATCH removed four
+directories after a `reclaim` that copied nothing — TZ-31's pair, and `6e88615c-345d-5a08-be99-6375cc1a1073` and
+`f9a43b8e-0bb7-4a08-8e42-59eed8909833`, born 2026-10-24 07:58:19 and 07:58:17 UTC by sessions no report names; its
+B-RECLAIM-OWN removed `/root/tz32-work/wt` by `git worktree remove` without `--force` and `/root/tz32-work` by
+`rm -rf`, none refused, each verified gone by `test -e`. **The worktrees registered at TZ-32's end are two:** the
+primary checkout and `/root/btc-recorder-svc`. **TZ-32's own pair, `f2adac1e-d4b2-5417-b2ba-a166434774bb` and
+`236f3e7a-57cc-45b7-9aea-18e9a8ad59b9`**, the second born with its session's process `2945054`, is the next TZ's to
+reclaim (§6, harness) — unless a reboot of the host emptied `/tmp`. The two remote-control `claude` processes have run
+since 2026-10-26 18:11:45 and 18:11:47 UTC, pids `2875240` and `2875250`, and no directory beside a TZ's session was
+born with them.
 **`/root/tz18a-svc/` is not scratch:** it is the chain book's code, which `btc-chainbook.service` runs, and no TZ
 removes it while that unit is the pair book's fallback. **TZ-26 stopped and disabled that unit and kept the tree**;
 TZ-22 reclaims both once the pair book has run for days. **Nor is `/root/btc-pairbook-svc/`**, the pair book's code —
@@ -1140,6 +1164,7 @@ remove` touches it.
 | **the maker rebate is 20% of the taker fee, measured against the venue's payouts** | the Architect, 2026-10-20, after TZ-29's verdict — exploration, no gate: four wallet-days, every one considered, of the three busiest makers of `btc-updown-5m-1788560400`; each day's `MAKER_REBATE` payout, one a wallet near 00:45 UTC in Data API v2's `activity`, against `Σ 0.07 × C × p × (1 − p)` over the wallet's maker fills of the previous UTC day — its `v2/trades` rows with `taker_only` `false` less those with `true`, matched exactly on hash, token, side, size, price and time: `0.20003` and `0.19975` for `0x21f4c1a1…` on 2026-10-19 and 2026-09-25, `0.19999` for `0x322b2e7c…` on 2026-10-19, `0.20000` for `0x9d57c42e…` on 2026-10-05, over `12,235` to `31,601` fills a day. The fourth day includes hourly and ETH up/down fills, all Crypto at `0.07`; its `updown` slugs alone give `0.23986`, so the payout covers every market the wallet made. `REWARD` payouts to `0x21f4…` run from 2026-08-08 to 2026-09-06 and stop; `rewards/markets/{conditionId}` is empty for `1788530400`, `1792451400` and three open markets | **stands as a measurement of the venue's terms:** the operative field is `feeSchedule.rebateRate` `0.2`, and `makerRebatesFeeShareBps` `10000`, `makerBaseFee` and `takerBaseFee` `1000` are not; the venue pays its rebate on the fills Data API v2 reports, to within 0.15%, so the fill record M0 summed is complete at that level. No liquidity rewards on these markets since August's programme. The four wallet-days are excluded from any TZ that measures the rebate |
 | **B3: a taker cannot capture the nested pair's violations through the venue's delay** | TZ-30, 2026-10-22, applied once to the first 768 qualifying windows of the 936 from `1791706500` to `1792548000` — `1791706500` … `1792403100`, 775 considered, 7 non-members — every window's streams replayed at venue time through one capture rule fixed before any of them was read: a firm violation seen on the host, both legs bought at depth through a one-way latency of 50 ms and the 150 ms taker delay, the excess sold into the book, the strikes known live. `S_b` over eight blocks of 96: `−67.383`, `−28.097`, `−3.846`, `−258.298`, `−58.149`, `−46.664`, `−131.702` and `−1.917` USDC, every block below `θ = 10`; each answer's false-reading probability `2^-8` under independent blocks; power `0.430`, `0.663` and `0.923` against TZ-30's three alternatives. G-REBUILD PASS — `10,693` of `10,752` valid replies compared, the rebuilt touch equal at `10,688`; G-REHEARSAL 9 of 9; G-SET; DETERMINISM 48 of 48; G-STILL. Re-derived by the Architect: the branch's file against Appendix A and the report's 41 rows on `main`; the set from the report's disclosure, member list `4d4a7f5f…`; the gate arithmetic at 60 digits; and block 8, the deciding block, by an independent reference in exact rationals on its 96 streams downloaded anonymously and the venue's 192 settled documents — `−1.916692656212`, the report's `S_8` to the last digit | **stands — NO CAPTURE, 2026-10-22: the backup track closes.** Barred from the reading: 532 attempts in 75 windows, worth `+666.784` USDC at the touch when seen and `−596.055` once matched; every variant lost — the delay removed `−354.494`, the latency zeroed `−774.237`; the excess held to settlement instead of sold `+587.493`, a direction, no track. **The violation is on the book and gone, on one leg at least, before a taker's order matches** |
 | **W0: the makers who earned most on markets already read kept earning on markets no one had read** | TZ-31, 2026-10-23, applied once to the first 1,008 qualifying five-minute markets after `1792451400`, `1792451700` … `1792753800`, every constant on disk before any label was read: the ten makers named on M0's last 864 markets — the largest `S / sqrt(V)` among the 128 wallets with a maker fill in at least 648 of them — kept `26,777.413` USDC on `3,233,296.886` shares of their maker fills before `T0 + 300`, **`0.828` c a share** — `0.590` c at settlement and `0.238` c of rebate — at or above W-EARN's `thr` `16,811.245` USDC, `0.520` c a share, `α = 0.005` by Ville's inequality; the power at the set's own `V`, `4.28` times the projection's, `0.447`, deciding nothing. G-REHEARSAL 18 of 18, G-SET, G-STILL PASS. Re-derived by the Architect from the venue through its own client and its own arithmetic, 93 of 93 figures to every digit, the gate at 80 digits, and the instrument's 12 set files byte for byte from the branch's bytes | **stands — W-EARN, 2026-10-23: W1 opens.** Barred from the reading: all ten earned, one of them `63%` of the sum; on the 336 markets that are the pair book's five-minute legs `0.747` c a share; every maker of the set together `0.211` c a share and every taker `−1.013` c, the fee included. **W-EARN says nothing of a quote of ours** — its place in the queue, its share of the fills, the adverse selection it would meet and the 150 ms taker delay are W1's |
+| **W1: a quote of ours at the touch keeps under half a tick a share, even first in every queue — and loses behind it** | TZ-32, 2026-10-27, applied once to the first 288 qualifying windows from `1792754100`, `1792754100` … `1793013300`, 289 considered, `1792923300` excluded on a gap above 15 s, every constant on disk and the instrument's commit on `origin` before any label was read: one rule — a bid and an ask of five shares at the five-minute leg's touch from `T0` to `T0 + 295`, replaced when the touch moves, a 20-share cap, post-only, a 50 ms one-way latency — replayed at venue time under nine variants. `front`, first in every queue and never met by a crossing order: `S` `506.689` USDC on `642,581.62` shares, `0.079` c a share — `−0.185` c at settlement and `0.264` c of rebate — at or below its NO EARN bound `2,726.942`, `0.424` c, `α = 0.005` by Ville's inequality: **W1-NO-EARN**. `behind`, at the back of every queue, every departure from behind it and every crossing order a taker: `S` `−2,271.140` on `194,269.53` shares, `−1.169` c, below its EARN bound `525.780`. Power `0.998569` and `1.0` at the set's own `V` and `Sh`, deciding nothing. G-REHEARSAL 11 of 11 against the Architect's independent reference, G-SET, G-BOOK `417,728` of `418,535` match frames, DETERMINISM 18 of 18, G-STILL PASS. **Re-derived by the Architect from the venue and the archive's Releases on 2026-10-27:** the 289 legs' documents through its own client, every one qualifying, the member list `4c10c0a1…`, 136 Up; the 289 streams downloaded anonymously, `5,050,052,883` bytes for the members, the non-member's gap `52.6` s read off its stored frames; TZ-32's own replay over them, its 288 units byte for byte the report's, `bad6b50a…`, 930,762 lines; every variant's fills, shares, `X`, `C`, `R`, `V`, settlement and `S` in exact rationals from those units' fills and the venue's labels, 9 of 9 to the last digit; G-BOOK's counts from the units; the gate at 80 digits | **stands — W1-NO-EARN, 2026-10-27: W1 closes for the touch rule, W2 does not open, and the W track closes** (§5). Barred from the reading: `front`'s `S` also above its own EARN bound, by `20.723`; the settlement part negative in every variant; `front_L0`, zero latency first in every queue, `0.151` c a share, `−0.112` c at settlement; `L0`, zero latency behind, `−0.798` c; `prop`, departures in proportion, `−0.940` c |
 | the collector was not modified between TZ-01a and TZ-02 | hash equality, `6c5089…` read from `origin/main` | **stands** |
 | the sign of `D = p_interval − p_naive` has no preferred direction | TZ-02 measurement 1 | **stands, and is of no consequence** |
 | the venue's maker-rewards terms are readable from our capture | TZ-07a V9: the `rewards` key is absent from all 400 `gamma.json`. **TZ-14 §3.8, over 1,200:** the `rewards` object is still absent, but `rewardsMaxSpread` `4.5`, `rewardsMinSize` `50` and `holdingRewardsEnabled` `False` are present at 1,200 of 1,200 as top-level keys; no top-level key carrying a daily rate exists | **NARROWED.** The per-market terms are in the capture under individual names; the rate paid is not, so no maker income can be computed from it. |
@@ -1154,8 +1179,8 @@ remove` touches it.
 | 0 | is the settlement rule what the CANON §1.1 says it is? | **CLOSED 2026-09-11 — yes. TZ-04b: 200 of 200 against a 199-of-200 gate**, reproduced by TZ-06 R-c |
 | 1 | is `p_fair` calibrated against true-rule labels? | **ANSWERED 2026-09-18.** The normal link: disqualified at `tau` 60 and 30 by TZ-08a, against the band TZ-07a §8 fixed. The Student link of TZ-11a: **NOT DISQUALIFIED at `tau` 240, 180, 120, 90 and 60, inside its domain**, by TZ-12's sized gate applied once to test 3 (TZ-13); **UNDECIDABLE at 30 and 10**, where G3 lacks power. Phase 1 can only disqualify: none of this is a confirmation. |
 | 2 | does the **market price** deviate from `p_fair`, and by how much? | **NO EDGE at `tau` 180, 120, 90 and 60 — TZ-16a's first look, 2026-09-27**, closed for the Student pricer inside its domain. **UNDECIDABLE at 240**, where neither tail was reached — **and final: the second look is withdrawn unrun, 2026-10-04**, because its first look stood at `−0.0007` a share after the fee, so no reading of it could fund a taker strategy (CANON §1.5). No `tau` reads EDGE. TZ-15's UNDECIDABLE at all five `tau`, 2026-09-19, stands as its own reading. **TZ-19, the second look, was BLOCKED on 2026-10-03 at its host gate, before any set was formed:** no recorder ran (§7 items 85 and 86). Its inputs are on disk and precede the capture's stop; with the look withdrawn it is not re-issued. |
-| 3 | is the deviation capturable after fee, spread, depth, the taker delay, oracle basis? | **does not open:** no `tau` reads EDGE on the taker track, the maker track's M0 read NO EARN, and the backup track's B3 read NO CAPTURE (below). The W track carries its own capture step, W1 |
-| 4 | live, minimum size, fixed loss limit | **does not open:** no track reached Phase 3. The W track carries its own live step, W2, behind W1 |
+| 3 | is the deviation capturable after fee, spread, depth, the taker delay, oracle basis? | **does not open:** no `tau` reads EDGE on the taker track, the maker track's M0 read NO EARN, the backup track's B3 read NO CAPTURE, and the W track's own capture step, W1, read W1-NO-EARN (below) |
+| 4 | live, minimum size, fixed loss limit | **does not open:** no track reached Phase 3, and the W track's own live step, W2, does not open |
 
 **The backup track** — CANON PART II, beside the phases and never inside them; it uses no pricer.
 
@@ -1179,8 +1204,17 @@ remove` touches it.
 | step | question | state |
 |---|---|---|
 | W0 | do the ten makers named on M0's last 864 markets earn, at settlement and with the 20% rebate, over every maker fill before `T0 + 300`, on the first 1,008 qualifying markets after `1792451400`? | **W-EARN, 2026-10-23 — TZ-31: closed.** `0.828` c a share on 1,008 markets no one had read — `0.590` c at settlement and `0.238` c of rebate — at or above W-EARN's `0.520` c, `α = 0.005` by Ville's inequality; power `0.447` at the set's own `V` and `Sh`, deciding nothing (§4) |
-| W1 | does our quoting, simulated on the pair book's streams with queue position, the taker delay and our own cancels, keep the named makers' edge? | **open — TZ-32, written 2026-10-24.** One rule fixed before any of its streams is read: a bid and an ask of five shares at the five-minute leg's touch from `T0` to `T0 + 295` on the host's clock, replaced when the touch moves, a position cap of 20 shares, post-only, a one-way latency of 50 ms. Replayed label-free at venue time on the pair book's streams of the first 288 qualifying windows from `1792754100`, their legs after W0's last member, under nine variants: **W1-EARN** on `behind`'s EARN — at the back of every queue, every departure from behind it, every crossing order a taker after the 150 ms delay; **W1-NO-EARN** on `front`'s NO EARN — first in every queue, no crossing order a taker; each at `0.005` by TZ-23's thresholds, `λ` `0.014605` and `0.016557`; projected power `0.998` and above `0.99999`. G-REHEARSAL against the Architect's independent reference on TZ-27's 51 windows, G-SET, G-BOOK on the rebuilt touch, DETERMINISM and G-STILL; its fetch no earlier than 2026-10-27 03:20 UTC, once the archive has moved the last candidate |
-| W2 | live, at minimum size, with a fixed loss limit | **does not open before W1** |
+| W1 | does our quoting, simulated on the pair book's streams with queue position, the taker delay and our own cancels, keep the named makers' edge? | **W1-NO-EARN, 2026-10-27 — TZ-32: closed.** The touch quote, first in every queue and never met by a crossing order, `0.079` c a share on 288 legs no one had read — `−0.185` c at settlement and `0.264` c of rebate — at or below W1-NO-EARN's `0.424` c, `α = 0.005` by Ville's inequality; at the back of every queue `−1.169` c, below W1-EARN's bound (§4) |
+| W2 | live, at minimum size, with a fixed loss limit | **does not open:** W1 read W1-NO-EARN. **The W track is closed** (below) |
+
+**The L track** — CANON PART II, opened 2026-10-27: the venue's liquidity rewards, on markets where information arrives
+slowly.
+
+| step | question | state |
+|---|---|---|
+| L0 | on reward markets chosen by a rule fixed before their data, does our quote, simulated on the captured books and trades, earn its reward share and maker rebate net of its fills? | **open — no TZ yet.** Its capture is deployed by one TZ and measured by the next (CANON hard rule 11); nothing of it exists on the host |
+| L1 | live, at minimum size, with a fixed loss limit | **does not open before L0** |
+| L2 | more markets and more size | **does not open before L1** |
 
 **The Architect's exploration** read the venue's public record of 144 markets, T0 `1791050100` … `1791093000`,
 on 2026-10-04 to frame M0, and again on 2026-10-05 and 2026-10-09 for TZ-23's rehearsal, with the 16 documents
@@ -1218,17 +1252,30 @@ downloaded the streams of the windows `1792137600` … `1792722600` anonymously 
 markets — and TZ-27's 51 again, and replayed them through the rule TZ-32 fixes, to explore it and to project its
 variance, and TZ-27's 51 through an independent reference; ran TZ-32's instrument over TZ-27's 51 and over a stand-in
 set of the 48 windows `1792680300` … `1792722600`; and read those windows' legs' settled documents from the venue. Every
-one of these is excluded from W1's set by `T`, and no figure of it is evidence. **No fill of a five-minute market with
-`T0 > 1792753800` has been read by anyone, no document of one, and no stream or stored book of a window at or after
-`1792723500`.**
+one of these is excluded from W1's set by `T`, and no figure of it is evidence. **On 2026-10-27 the Architect's audit of
+TZ-32** read the settled documents of its 289 considered legs from the venue through its own client, downloaded their
+289 streams anonymously from the archive's Releases and replayed them through TZ-32's own replay, and computed the money
+from the units' fills in exact rationals. **After the reading it explored** — downloading Binance's public aggregate
+trades of BTCUSDT spot and of the USDⓈ-M perpetual for 2026-10-23 to 2026-10-26 from `data.binance.vision`, each file
+checked against its `.CHECKSUM`, and replaying TZ-32's 288 members, every one read by TZ-32, under TZ-32's rule with a
+quote withdrawn on Binance's adverse move (§5, What TZ-32 found) — and read RTDS live for ten seconds (§6). Every one of
+these is read, and no figure of the exploration is evidence. **No fill of a five-minute market with `T0 > 1792753800`
+has been read by anyone; no settled document of a leg after `btc-updown-5m-1793023800`, the last of the 300 TZ-32's
+fetch requested; no stream or stored book of a window after `1793013300`; and no Binance trade after 2026-10-26
+23:59:59 UTC.** **For the L track, on 2026-10-27, the Architect** read the venue's reward configurations —
+`clob.polymarket.com/rewards/markets/current` and `/sampling-simplified-markets`, 14,089 and 14,092 rows — the order
+books of the first token of 1,726 of those markets, the documents of 1,723 of them through gamma `/markets`, and the
+venue's fee, liquidity-rewards and holding-rewards pages. All of it framed the track and is excluded from L0's sets by
+time (CANON PART II).
 
 **This project has a settlement variable measured and confirmed, a pricer that Phase 1 has not
 disqualified at five `tau` inside its domain — which confirms nothing — NO EDGE for a taker against the market at
 `tau` 180, 120, 90 and 60, and `tau` 240 undecided and final, its second look withdrawn; NO EARN for a maker inside the
 window over both looks — the makers' whole margin is the rebate, under half a tick a share; the nested pair violated
 on stored books (B2) but not capturable by a taker through the venue's delay (B3, NO CAPTURE); and the W track's W0
-read W-EARN — the ten named makers kept `0.828` c a share, rebate included, on markets no one had read (TZ-31) — with
-its W1, our own quoting simulated, open (TZ-32).** The
+read W-EARN — the ten named makers kept `0.828` c a share, rebate included, on markets no one had read (TZ-31) — and
+its W1 read W1-NO-EARN: a quote of ours at the touch keeps under half a tick a share even first in every queue, all of it
+rebate, and loses behind it (TZ-32); the W track is closed.** The
 normal link is disqualified at `tau` 60 and 30, and TZ-10b showed why: the settlement residual is not
 normal, and less so the smaller `tau` is. TZ-11a fitted the Student link and its causal domain on the
 Thursday–Friday set and froze them. TZ-12 measured, from the frozen pricer's own predictions, each
@@ -1327,6 +1374,17 @@ all, where the same attempts were worth `+666.78` at the touch when seen. Removi
 rescued no variant. The violations are on the book, and gone, on one leg at least, by the time a taker's order
 matches: the stale side is moved or taken inside the delay. The backup track closes, and the W track asks which makers
 keep an edge on the fills they get.
+**What TZ-32 found.** On the first 288 qualifying windows from 2026-10-23 11:15 UTC, five-minute legs no one had read, a
+bid and an ask of five shares at the touch, replaced on every move, replayed through the 150 ms taker delay and a 50 ms
+latency: first in every queue the quotes kept `0.079` c a share, `−0.185` c at settlement and `0.264` c of rebate, and at
+the back of every queue they lost `1.169` c. The settlement part was negative in every variant; zero latency first in
+every queue kept `0.151` c, all of it rebate. **The touch quote's fills are adversely selected, and neither speed nor
+queue place changes the sign of its settlement.** The Architect's exploration after the reading (above), in-sample and
+barred, withdrew a quote when Binance's price moved against it — the perpetual's trades known 125 ms after each, a move
+of `0.50` USD over 3 s, the side not quoted again for 1 s — and it lifted every variant without changing the conclusion:
+first in every queue `0.337` c a share, `0.379` at zero latency; with departures in proportion `−0.496` c, at the
+back of every queue `−0.640` c, `−0.279` at zero latency. The fills worth keeping are the front of the queue's, and
+a new quote joins behind the displayed size. W2 does not open, and the W track closes.
 **Other assets' markets are not a shortcut:** the pricer's domain threshold is in USD/s and its link
 tables are the BTC feed's, so each asset would need its own Phase 0 and Phase 1, and same-window
 outcomes across assets move together, so they add far less information than their count.
@@ -1357,6 +1415,7 @@ outcomes across assets move together, so they add far less information than thei
 | **taker delay, crypto** | `150` ms since 2026-09-04 14:00 UTC, up from `50` ms (2026-08-17) and `250` ms before — the venue's changelog, read by the Architect on 2026-10-04, 2026-10-09, 2026-10-19, 2026-10-20, 2026-10-22 and 2026-10-23, which records no fee, rebate, delay, websocket, order-type, minimum-size or tick change after it through its entries of 2026-10-21; measured by no TZ (§7 item 87). **The venue's order-lifecycle page, read 2026-10-23:** a marketable order on these markets is held, then validated again and matched or placed; during the hold it "is pending and cannot be canceled"; a post-only order that would match immediately "is rejected instead of executed"; the page still gives the hold as `250` ms, and the changelog's later entry governs. TZ-30's replay took the delay as a constant of the venue for its own orders; TZ-32's takes it as the hold before an order that would cross a resting quote of ours matches it |
 | **public fills — Data API v2, measured 2026-10-05 and 2026-10-09** | `GET https://data-api.polymarket.com/v2/trades?condition=…&taker_only=…&limit=1000`, no credentials, at most 20 condition ids a request and 1,000 rows a page. `taker_only=true`, the default, serves each fill once on its taker side — one row per taker order and transaction, `size` its shares and `price` the size-weighted mean of its fills — and `false` adds the maker rows; rows under `0.01` share are never served; sizes and prices are JSON numbers with a decimal point, `100.0`. **The cursor carries no filter:** `next_cursor` encodes a page size and a block-time and sequence anchor, and sent alone continues the venue-wide feed, so every request re-sends `condition` and `taker_only` beside it; sent so, 20 markets' rows equal v1's `/trades` by offset paging, 23,588 of 23,588 taker rows and 71,908 of 71,908 with maker rows. `/v2/trades` takes 300 requests in 10 s, gamma `/markets` 300; `/markets?slug=…&slug=…&closed=true` serves up to twenty documents in one request, and `closed` defaults to `false`. **v1 is retired on 2026-10-24**, and its offset stops at 10,000 rows. The changelog's entry of 2026-10-07 changes `/v2/trades` only for requests that carry `user`. Read on markets no TZ scores (§5). **TZ-23's fetch, served at every request:** `1,565` s for 202 chunks and `6,013,558` rows, against `1,789` s projected after 30 chunks; its walk `23.0` s for 202 gamma requests. **Re-read 2026-10-19, unchanged:** the changelog's newest entry is still that of 2026-10-07, and the Architect's run of TZ-23's own instrument against the venue that day wrote the first look's six files byte for byte as TZ-23 had, at `0.832` s a page and a worker in the morning; TZ-29's held fetch of the same markets ran at `0.363` an hour later, its slowest chunk `30.1` s, every chunk inside the idle stretch. **TZ-29's fetch on the host, 2026-10-20:** its walk `17.9` s, 202 chunks every one inside the idle stretch, the longest `25.8` s, `1,337` s of fetching projected after its first 30, `2,166` s of wall clock. **The maker rows, read by the Architect for TZ-31 on 2026-10-22** on M0's last 864 markets — exploration, no gate: `taker_only=false` serves each fill's maker rows beside its taker's, each with its own `proxy_wallet`, side, outcome, size and price, the maker's own; a market's maker rows are its full feed less its takers' rows as a multiset, ``2.64` to `3.52`` full rows a taker row by chunk; in a transaction the makers' sizes sum to the taker's at 1,150,934 of 1,151,005, and where they do not the venue prints a maker's size at two decimals and the taker's at six; no transaction carries two timestamps; and a taker's price is its one maker's price, or the size-weighted mean of several, at 135,854 of 135,864 rows on 120 markets, the other 10 differing below `1e-6`. Re-read 2026-10-22: the changelog's newest entries, of 2026-10-21, add equity prices and touch nothing here. **TZ-31's instrument on the venue, by the Architect on 2026-10-22:** on a stand-in of 1,008 markets read by TZ-29, `1792149300` … `1792451400`, its walk `15.9` s for 51 gamma requests; 336 chunks of three markets and both feeds, every one inside the idle stretch, the longest `14.7` s; `1,284` s of fetching projected after its first 30, `1,517.7` s of fetching at `0.511` s a page and a worker over `5,936` pages, `3,240` s of wall clock; at five markets a chunk over the formation's 864, `0.518` s a page and a worker and the longest chunk `22.5` s |
 | **reference prices — RTDS is legacy** | the venue's changelog of 2026-09-15 marks RTDS legacy for reference prices and opens PolyBolt, `wss://ws-live-v2.polymarket.com/ws`, whose `price.crypto.twap` carries the Chainlink TWAP prices — **with CLOB API credentials required**. RTDS still served all four of the recorder's topics on 2026-10-04 (TZ-21's G-PATH), and none of the changelog's entries through 2026-10-07 names an end date. **The recorder's settlement feed rests on a legacy socket**; this project holds no credential (§6, egress), and a move is a TZ of its own. Read by the Architect 2026-10-05 and 2026-10-09 |
+| **RTDS's fast prices, read live by the Architect on 2026-10-27** | from a second host, for ten seconds, 15 frames: `crypto_prices` `btcusdt` publishes one price a second, its payload stamped on the whole second and the message about `130` to `150` ms after it; `crypto_prices_chainlink` one a second, its payload stamped on the second before. A price sampled once a second on the second cannot withdraw a quote inside the 150 ms taker delay. **Binance's public trade archive**, `data.binance.vision`, served that host the daily aggregate trades of BTCUSDT spot, stamped in microseconds, and of the USDⓈ-M perpetual, in milliseconds, each with its `.CHECKSUM`; `api.binance.com` answered `451` there. The capture host's reach to either is unread |
 | **maker incentives** | **Re-read 2026-10-09, and unchanged on 2026-10-19** by the venue's fee and maker-rebate pages: makers pay no fee; the Crypto maker rebate is 20% of each market's taker fees, paid daily in pUSD and fee-curve weighted — each filled maker order earns the market's pool in proportion to `C × 0.07 × p × (1 − p)` at its own price, totals per market, a `1` pUSD minimum payout; and since 2026-05-28 a taker rebate programme returns up to 50% of a taker's own fees by 30-day volume tier, to takers only. Read 2026-09-12: the measured `rebateRate` `0.2` is a share of the taker fee paid on a fill; separately the venue runs a liquidity-rewards programme paying for resting orders near the midpoint, scored quadratically in distance and linearly in size, sampled once a minute, configured per market as `rewards.rewardsMinSize`, `rewards.rewardsMaxSpread` and `clobRewards[].rewardsDailyRate`. **Measured TZ-07a V9 and TZ-14 §3.8:** the `rewards` object is absent from every `gamma.json` read — 400, then 1,200 — but the same documents carry `rewardsMaxSpread` `4.5`, `rewardsMinSize` `50` and `holdingRewardsEnabled` `False` as top-level keys at 1,200 of 1,200, beside `feesEnabled`, `takerBaseFee` `1000`, `makerBaseFee` `1000` and `makerRebatesFeeShareBps` `10000`. **No top-level key carries a daily rate**, so no maker income can be computed from the capture. **Measured against the venue's payouts on 2026-10-20** (§4): the `MAKER_REBATE` paid near 00:45 UTC is `0.19975` to `0.20003` of `Σ 0.07 × C × p × (1 − p)` over a wallet's maker fills of the previous UTC day, at four wallet-days of three wallets — the operative field is `rebateRate`, and `makerRebatesFeeShareBps` `10000`, `makerBaseFee` and `takerBaseFee` `1000` are not; **no liquidity rewards on these markets since August's programme:** a large maker's `REWARD` payouts end on 2026-09-06, and `rewards/markets/{conditionId}` is empty for three open markets that carry `rewardsMinSize` `50` and `rewardsMaxSpread` `4.5`. M0's NO EARN holds for any rebate share up to `0.213536` (§4). |
 | host is shared | unrelated production services live on the same filesystem — `crypto-auto`, `my_real_estate_bot`, `seahome_webapp.git`, `/var/www`, `/var/log`. The recorder never deletes anything it did not write. |
 | capture path | `/var/lib/btc-recorder/**` and, for the chain book, `/var/lib/btc-chainbook/**` (§2.5) — both outside the repository by design, so no capture can reach git history |
@@ -1367,7 +1426,7 @@ outcomes across assets move together, so they add far less information than thei
 | **sandbox limit — network** | calls that read the git token and send it to `api.github.com` are refused. `git` push/pull work. Release creation and asset upload cannot be done from inside the session — hand the upload to the Boss and verify by anonymous download. **The Architect's session is not the Executor's and is not constant:** it could not reach `github.com` on 2026-09-22 (TZ-18 §10 C3) and reached it and both venue hosts on 2026-09-23. A TZ never depends on the Architect's reach; a check it cannot perform becomes a BLOCK condition (CANON hard rule 13). |
 | **GitHub Releases — the archive's destination, read 2026-10-10 and 2026-10-11** | GitHub's documentation, read by the Architect on 2026-10-10 and 2026-10-11: up to `1,000` assets a Release; each file under 2 GiB, `2,147,483,648` bytes; no limit on a Release's total size or its bandwidth; unauthenticated API requests limited to `60` an hour from one address; content-creating requests to `80` a minute and `500` an hour, a refusal `403` or `429` with `retry-after` or `x-ratelimit-reset`, else a wait of at least a minute, growing. **The API's record of an asset carries its digest:** on 2026-10-11 the Architect read `GET /repos/seahomebatumi-ai/btc-5m-twap/releases/tags/tz-01a-dataset` and that Release's asset list through a second route, because its own session's proxy refused `api.github.com` for this repository — Release `385702977`, one asset, `twap-divergence-observations.parquet`, `size` `76818669`, `state` `uploaded`, `digest` `sha256:229a944f…` equal to §2.1's, `browser_download_url` `https://github.com/seahomebatumi-ai/btc-5m-twap/releases/download/tz-01a-dataset/twap-divergence-observations.parquet` — and downloaded the asset through TZ-27's own `download_checked`: `200`, 76,818,669 bytes, SHA-256 equal, in 1.4 to 3.6 s, github.com answering with a `302` to `release-assets.githubusercontent.com`. **Writing a Release needs a credential the session cannot send** (above; contract §5.1): TZ-27's B-UPLOAD is the Boss's block, under the token the primary checkout's remote URL carries or else the one `gh` holds, and its reads of the Release are anonymous, 120 s after its upload completes because an anonymous reply may be cached for 60 s. Its requests carry `User-Agent: btc-5m-twap-tz27` and `X-GitHub-Api-Version: 2022-11-28`. **TZ-27's Release `409534533`** on `tz-27-pairbook-streams` holds 51 assets, `678,739,504` bytes, every one downloaded anonymously and hashed equal by the Architect on 2026-10-11 in 11 s; the Architect's session could not read the API's record of it. **The host's rates, by TZ-27:** B-UPLOAD's 51 uploads, `678,739,504` bytes, from 08:24:29 to 08:25:42 UTC with 1 s between writes, about `9,297,801` bytes a second; `verify`'s 51 downloads and its API reads from 08:27:46 to 08:28:34, about `14,140,406`. TZ-28 budgets a transfer at `2,000,000` bytes a second, under a quarter of the slower, and sends every request through TZ-27's `build_request`. **By TZ-28's first run:** its upload of `430,047,476` bytes ran at seconds 195 to 235 of one window with the 1 s gaps, about `10.2` MB a second, and its downloads at seconds 358 to 391, about `13` MB a second; one idle stretch carries a day's streams at these rates. **TZ-30's downloads:** every stream file by its Release's download path, `https://github.com/seahomebatumi-ai/btc-5m-twap/releases/download/<tag>/<asset>`, anonymous, `User-Agent: btc-5m-twap-tz30` and `Accept: application/octet-stream`, github.com answering `302` to `release-assets.githubusercontent.com`; the Architect downloaded TZ-27's 51 assets so on 2026-10-20, `678,739,504` bytes, each equal to its set's bytes and SHA-256, in under a second each. The same session is refused the Release pages and the API for this repository, so the per-asset sizes of the later Releases are read on the host, from each run's `set.json`. |
 | **sandbox limit — destructive actions** | `kill` is refused by the permission classifier, alone or inside a compound command, and TZ-09 established that `rm -rf` of several trees is refused the same way. `rm -rf` of **one** tree was refused for TZ-12, TZ-13 and TZ-15 and **not refused for TZ-14**, three refusals in four TZs, and for two of TZ-16a's three trees while the third went through, so refusal is not predictable. **Any TZ that must restart the recorder or remove a tree keeps the fallback: it hands the Boss one exact block** and verifies the outcome from `runtime.jsonl`, `ps`, `df` and `test -e` rather than from his report. TZ-18's service was the first process a TZ started that had to be stopped this way: the Boss ran its block, and TZ-18a §0.4 verified the `stop` record. **TZ-18a's `rm -rf` of three trees, one tree per command, was not refused.** TZ-18a's service, now `btc-chainbook.service`, is stopped only by K-20C (§2.5). **TZ-20 tried `systemctl` against a unit:** `enable --now` was refused as "Unauthorized Persistence", and the Boss ran both starts; `install`, `daemon-reload`, `systemd-analyze verify`, `systemctl kill`, three `git worktree remove --force` and three `rm -rf`, one tree each, were not refused. **TZ-21:** B-MOVE's `git checkout` in the recorder's unit tree and B-KILL-REC's `systemctl kill --signal=SIGTERM` were not refused; three of B-RECLAIM-SCRATCH's ten single-tree `rm -rf`, identical in form, were — "[Interfere With Workloads]" — and the Boss ran them, verified by `test -e`. `systemctl restart` has not been tried. **TZ-26:** B-SWITCH — `systemctl disable --now` and `enable --now` — was refused as "[Production Deploy]" and run by the Boss, 25 minutes later and 10 s before its band (§7 item 104); B-INSTALL's `install`, `daemon-reload` and `systemd-analyze verify`, B-KILL-SVC's `systemctl kill --signal=SIGTERM` and every `rm -rf`, one tree each, were not refused. **TZ-27:** one of two single-tree `rm -rf` and the instrument's `delete` were refused as "[Irreversible Local Destruction]", and a plain `df`/`du` right after a refusal as "[Auto-Mode Bypass]"; the Boss ran each. `systemctl kill`, the tag's push and every other mode were not refused. **TZ-28:** B-ENABLE's `systemctl enable --now` was refused as "[Auto-Mode Bypass]" and run by the Boss; B-INSTALL's `install`, `daemon-reload` and `systemd-analyze verify`, both `rm -rf` of B-RECLAIM-SCRATCH and B-RECLAIM-OWN's lines were not refused. **TZ-29 and TZ-30:** every `rm -rf`, one tree each, and every `git worktree remove` were not refused. |
-| **harness — background output** | Claude Code keeps its own copy of each background command's terminal output under the session's own directory, `/tmp/claude-0/-root-btc-5m-twap/<session>/tasks/`, beside the scratchpad; no step of the running session can remove it. The next TZ's B-RECLAIM-SCRATCH removes it with the session's directory, once no running `claude` process made that directory (§7 items 91 and 95). TZ-23's removed the three directories TZ-21 had left, TZ-24's TZ-23's pair, TZ-26's TZ-24's, TZ-27's TZ-26's, one by the Boss's hand, TZ-28's TZ-27's, TZ-29's TZ-28's, TZ-30's TZ-29's, with three directories no report names, and TZ-31's TZ-30's, with `eff3ddd1…`; TZ-31's own pair, `917cd7ac…` and `19ca9482…`, the second born with its process `2427892`, is the next TZ's — unless a reboot emptied `/tmp`. **What a session prints, Claude Code keeps:** its transcript under `/root/.claude/` holds every command's terminal output, so a read the Executor runs is written outside the work tree, and a TZ's print prohibitions bind those reads (§7 item 118) |
+| **harness — background output** | Claude Code keeps its own copy of each background command's terminal output under the session's own directory, `/tmp/claude-0/-root-btc-5m-twap/<session>/tasks/`, beside the scratchpad; no step of the running session can remove it. The next TZ's B-RECLAIM-SCRATCH removes it with the session's directory, once no running `claude` process made that directory (§7 items 91 and 95). TZ-23's removed the three directories TZ-21 had left, TZ-24's TZ-23's pair, TZ-26's TZ-24's, TZ-27's TZ-26's, one by the Boss's hand, TZ-28's TZ-27's, TZ-29's TZ-28's, TZ-30's TZ-29's, with three directories no report names, and TZ-31's TZ-30's, with `eff3ddd1…`, and TZ-32's TZ-31's, with `6e88615c…` and `f9a43b8e…`; TZ-32's own pair, `f2adac1e…` and `236f3e7a…`, the second born with its process `2945054`, is the next TZ's — unless a reboot emptied `/tmp`. **What a session prints, Claude Code keeps:** its transcript under `/root/.claude/` holds every command's terminal output, so a read the Executor runs is written outside the work tree, and a TZ's print prohibitions bind those reads (§7 item 118) |
 
 Not yet decided by any TZ and therefore not present: the Parquet decision journal and any deployment of
 the engine. The capture units are the recorder's, TZ-20's, and the pair book's, TZ-26's, and both run (above); the
@@ -1384,6 +1443,8 @@ to `/root/btc-forensics/` first.
 
 | # | defect | disposition |
 |---|---|---|
+| 123 | **A memory claim of TZ-32's held for its replay and not for its score.** §0.4 said a replay holds one window at a time, so no peak grows with the set; `replay`'s concatenation and `score` hold every member's parsed unit at once, and `score` peaked at `54,984,704` bytes, `1.67` times the Architect's `32,927,744` measured over the stand-in's 48 windows. The floor, twice the largest measured peak, held: `MemAvailable` never read below `283,758,592`. The Architect's defect; it moved nothing. | closed by rule: **a mode that holds the set is measured at the set's size before its floor is fixed.** |
+| 122 | **Eleven departures by TZ-32's Executor, all disclosed:** contract §1's pull and reads before §0.0's `mkdir`; the run 3 h 35 min after §3.6's instant, `fetch`'s 06:00 UTC deadline binding only while the archive fell short, which it did not; the set one window past §1's every-candidate case, `1792923300` excluded on its gap; one `journalctl` read no step named, inside §2 item 5; 71 refs against §0.5's 67, four of the archive's eight runs off its calendar; peaks above the Architect's (item 123); `state.json`'s `constants_at` the second `replay`'s instant, before the first label read; two scratch directories no report names removed by B-RECLAIM-SCRATCH's rule; the report assembled by scripts from the logs, those scripts let go with the tree; the archive's runs off its calendar recorded; and B-RECLAIM-OWN run in four calls and quoted whole. None moves the reading. | closed: upheld. |
 | 121 | **The book rebuilt from a leg's entries differs from the venue's own book frame deep in the book.** On TZ-27's 51 windows it equals the venue's at every level at `68,556` of `68,677` match frames, and on a stand-in of 48 weekday windows at `66,848` of `67,389`, `99.20%`; the differences sit far from the touch — sizes at prices near `0.01` or `0.99`, and a level one frame shows and the next corrects — and the touch was equal at `96` of TZ-27's `121` differences and at `434` of the stand-in's `541`: the rebuilt touch equal to the venue's at `68,652` of `68,677` and at `67,282` of `67,389`, `99.84%`. A gate on every level would read the book's far end, where no quote of W1's rests. | closed by rule: **TZ-32's G-BOOK compares the touch, each best price and its size, at no fewer than 99 in 100 match frames**, and prints the every-level count beside it, barred. |
 | 120 | **The package manager restarts both capture units.** `unattended-upgrade` stopped and started the recorder and the pair book at 2026-10-22 06:14:07–10 and 2026-10-23 06:08:56–58 UTC (TZ-31 report §2.9). A stop and start resets `NRestarts`, so this map's counters are not lifetime counts, and a G-STILL whose span holds such a run reads FAIL with no fault of the TZ; the window a restart falls in loses its stream. | open: recorded (§6, process supervision); **a G-STILL names the cause from both units' journal**, which TZ-32 §3.11 reads. |
 | 119 | **Eight departures by TZ-31's Executor, all disclosed:** contract §1's pull and reads before §0.0's `mkdir`; the power at the set's own figures `0.447` against `0.962` projected — the set's `V` `4.28` times the projection's, both quantities named by §1, deciding nothing; `eff3ddd1…` reclaimed where this map called it live — its processes were gone and `I scratch` named it earlier, and the TZ's rule governs; one `journalctl` read no step named, inside §2 item 5; `state.json`'s `constants_at` the second run's instant, before the first label read; the report assembled by a script, its files let go with the tree; the capture units' restarts by the package manager, recorded; and B-RECLAIM-OWN's first `reclaim` piped through `grep -v`, re-run unfiltered, 59 of 59 held. None moves the reading. | closed: upheld; **no `reclaim`'s output is filtered** — TZ-32 §9 says so in its own text; §3 here corrected. |
@@ -1564,7 +1625,11 @@ before the rebate, about nothing. **TZ-29, the second look, read NO EARN over bo
 makers kept `0.231` c a share, `0.219` c of it rebate — under half a tick a share with the rebate, and the rebate is
 the venue's 20%, measured against its payouts. M1 and M2 do not open. **The W track asks what the pool hid** (CANON
 PART II): whether the makers who earned most on markets already read keep earning on markets whose fills no one has
-read — TZ-31, W0, on the first 1,008 after `1792451400`.
+read — TZ-31, W0, on the first 1,008 after `1792451400`. **They do: W0 read W-EARN**, the ten named makers `0.828` c a
+share, rebate included. **A quote of ours at the touch does not: W1 read W1-NO-EARN** (TZ-32) — first in every queue under
+half a tick a share, all of it rebate, and behind it a loss. W2 does not open, and the W track is closed. **The L track
+asks it again of a quote the venue pays to rest** — its liquidity rewards, `148,331` pUSD a day over 14,089 markets on
+2026-10-27 (CANON §1.7) — on markets where information arrives slowly; nothing of it is built or captured yet.
 
 **Both captures run as systemd system units** since 2026-10-04 07:39 UTC, outside every session: the recorder,
 on `4216c04` with both tiers, had stopped on 2026-10-02 at about 11:36 UTC after 20 days, and the chain book on
@@ -1579,12 +1644,13 @@ thirty-six reads across twenty-six days**,
 and headroom is **`58` days** on §6's figure, conditional on that service staying disabled; the archive's daily runs keep
 the pair book's streams far below their cap and floor (§6, headroom).
 Between them the pricers, the recorder, the chain book, the pair book and the venue's own documents have produced
-seventeen conclusions — the Phase 0 answer, the normal link's Phase 1 answer, the reason for it, the shape of the residual, the
+nineteen conclusions — the Phase 0 answer, the normal link's Phase 1 answer, the reason for it, the shape of the residual, the
 closure of the Student pricer by an unsized gate, the size of the gate, the Student pricer's Phase 1
 answer under it, the inventory of the book, Phase 2's first reading, undecided, Phase 2's first decisive
 look, NO EDGE at four `tau`, the backup track's first
 and second answers, the identity of the reading both families settle on, M0's first look, undecided,
-B2's reading, VIOLATION, M0's reading over both looks, NO EARN, and B3's, NO CAPTURE — five deployment proofs and
+B2's reading, VIOLATION, M0's reading over both looks, NO EARN, B3's, NO CAPTURE, W0's, W-EARN, and W1's, W1-NO-EARN —
+five deployment proofs and
 one deployment that failed on its own build, the measurements of the feed and of the host that §2 and §6
 record, and eight written predictions that the data refuted:
 the third on its mechanism rather than its answer, the fourth on one row of five, the fifth on four rows
@@ -1608,7 +1674,9 @@ among nine departures by its Executor, all upheld (§7 items 107 and 109), and i
 prohibition forbade, among ten departures by its Executor, all upheld (§7 items 110 and 111), and for TZ-29 a
 projection in its delivery chat that named one of the two quantities it depends on, beside six departures by its
 Executor, all upheld (§7 items 116 and 117), and for TZ-30 a print prohibition its Executor's own read broke once,
-among seven departures (§7 item 118). A gate that could close its question in one direction only is why TZ-16a reads
+among seven departures (§7 item 118), and eight departures by TZ-31's Executor, all upheld (§7 item 119), and in TZ-32 a
+memory claim that held for its replay and not for its score, among eleven departures by its Executor, all upheld (§7
+items 122 and 123). A gate that could close its question in one direction only is why TZ-16a reads
 each answer from its own exact test; a deployment that failed and could not be stopped is why a TZ
 that starts a process now proves its request path before it starts and names its stop (CANON hard
 rule 14); a block run outside its band is why a block timed to a band now waits for it in its own text (the same
