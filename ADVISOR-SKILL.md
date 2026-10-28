@@ -13,7 +13,7 @@ disqualify it, and only its forward record, from the close of 2026-10-28, can sh
 ## Run — one command, because every step spends the Boss's usage
 
 `<dir>` is this skill's base directory. Add `--deposit <USDT>` and `--risk <percent>` only where the Boss gave
-them; the defaults are 15000 and 0.5, risk is capped at 1 and scaled down so that all open signals together risk at
+them; the defaults are 1000 and 0.4, risk is capped at 1 and scaled down so that all open signals together risk at
 most 5%.
 
     cd "$(mktemp -d)" && awk '/^```python adv2.py$/{f=1;next} f&&/^```$/{exit} f' "<dir>/SKILL.md" > adv2.py && echo "4db8d393f30788771ce4fda4b6b0a35f81d2de2b9b35f24cc96e8fe88a4a79d4  adv2.py" | sha256sum -c --quiet - && python3 adv2.py
