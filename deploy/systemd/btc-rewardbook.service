@@ -1,0 +1,23 @@
+# btc-5m-twap: the reward book, the L track's capture of reward markets' books and trades, as a system unit (TZ-33).
+# Installed byte for byte as /etc/systemd/system/btc-rewardbook.service.
+[Unit]
+Description=btc-5m-twap reward book, the books and trades of the day's reward markets streamed
+Wants=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/root/btc-rewardbook-svc
+ExecStart=/root/tz04a-env/venv/bin/python -B -u /root/btc-rewardbook-svc/tz33-reward-book-capture.py serve
+Restart=always
+RestartSec=5
+RestartPreventExitStatus=1 2 3
+Nice=10
+MemoryMax=192M
+StandardOutput=append:/var/lib/btc-rewardbook/service.log
+StandardError=append:/var/lib/btc-rewardbook/service.log
+
+[Install]
+WantedBy=multi-user.target
