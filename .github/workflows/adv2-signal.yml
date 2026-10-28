@@ -1,0 +1,45 @@
+# ADV-2's daily signal (CANON PART VII). GitHub runs adv2.py from ADVISOR-SKILL.md, checked by its SHA-256, and
+# posts the Boss's message as a comment on the open issue "ADV-2 сигналы". No Claude session takes part.
+name: ADV-2 signal
+
+on:
+  schedule:
+    - cron: '52 5 * * *'   # 05:52 UTC, 09:52 in Batumi; GitHub starts scheduled runs a few minutes late
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: adv2-signal
+
+jobs:
+  signal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract adv2.py and check its SHA-256
+        run: |
+          awk '/^```python adv2.py$/{f=1;next} f&&/^```$/{exit} f' ADVISOR-SKILL.md > adv2.py
+          echo "4db8d393f30788771ce4fda4b6b0a35f81d2de2b9b35f24cc96e8fe88a4a79d4  adv2.py" | sha256sum -c -
+
+      - name: Run the rule
+        run: python3 adv2.py > signal.md
+
+      - name: Post the message
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title='ADV-2 сигналы'
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --state open --limit 200 --json number,title \
+               --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          if [ -z "$n" ]; then
+            url=$(gh issue create -R "$GITHUB_REPOSITORY" --title "$title" \
+                   --body 'Каждое утро здесь появляются сигналы ADV-2 (CANON PART VII).')
+            n=${url##*/}
+          fi
+          { printf '@%s\n\n' "$GITHUB_REPOSITORY_OWNER"; cat signal.md; } > body.md
+          gh issue comment "$n" -R "$GITHUB_REPOSITORY" --body-file body.md
