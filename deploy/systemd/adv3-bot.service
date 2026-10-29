@@ -1,0 +1,27 @@
+# btc-5m-twap: ADV-3, the Boss's Binance Futures advisor, as a Telegram bot (TZ-35, CANON PART VII).
+# Installed byte for byte as /etc/systemd/system/adv3-bot.service; its stop is systemctl disable --now.
+[Unit]
+Description=ADV-3 advisor, the Boss's Binance Futures signals over Telegram
+Wants=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/root/adv3-bot-svc
+ExecStart=/root/tz04a-env/venv/bin/python -B -u /root/adv3-bot-svc/adv3-bot.py --serve
+Restart=always
+RestartSec=30
+RestartPreventExitStatus=3 4
+Nice=10
+MemoryMax=128M
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/adv3-bot
+StandardOutput=append:/var/lib/adv3-bot/service.log
+StandardError=append:/var/lib/adv3-bot/service.log
+
+[Install]
+WantedBy=multi-user.target

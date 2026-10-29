@@ -1,0 +1,33 @@
+ADV-3 - frozen 2026-10-28, before any of its results was computed by anyone. ADV-1's rule on the Boss's
+Binance Futures coins and their perpetuals' own candles, with a strength ranking whose claim has its own gate.
+Instruments: BTC BCH SKY XLM XMR MORPHO LIT NEAR HBAR GRAM ENA UNI ARB ZEC HYPE SUI ADA RENDER TAO FET YFI XRP
+  SOL ONDO LINK ALGO TRX BNB AAVE AVAX ETH INJ LTC XAU DASH PYTH WLD BTW QNT PUMP VVV EGLD, each its Binance
+  USD-M USDT perpetual. Data: the perpetual's daily candles (UTC), from Binance's archive (data.binance.vision)
+  for history and audits and from fapi.binance.com live; funding the perpetual's own, +0.01% per 8 h, longs
+  paying, where none is published. A coin has no signal before its 112-day lookback exists.
+Signal, stop, costs, funding and trade result: ADV-1's, word for word, on these candles.
+Strength z at close t: sigma_t = sample standard deviation of the last 56 daily log returns;
+  z = mean over L in {14, 28, 56, 112} of ln(C_t / C_(t-L)) / (sigma_t * sqrt(L)).
+TOP-3: the three LONG or SHORT coins with the largest |z|, ties by the order above. STRONG: a TOP-3 coin whose
+  four signs all agree with its side and whose |z| >= 1.
+STRONG strategy: at each close, in rank order, every STRONG coin without an open STRONG trade opens one at C_t
+  (U = 2*N_t, stop C_t -/+ U) while fewer than three STRONG trades are open; a STRONG trade closes exactly as
+  ADV-1's position does - at its stop inside a day, or at the close where the signal changes.
+Gate H, history to the close of 2026-10-27, all coins: the rule's total R <= 0 -> DISQUALIFIED (no direction
+  is published); otherwise not disqualified, which confirms nothing.
+Gate S, the same history: the STRONG strategy's total R <= 0, or its mean R a trade <= the rule's mean R a
+  trade -> DISQUALIFIED (TOP-3 is shown without the STRONG label); otherwise not disqualified, which confirms
+  nothing.
+Display facts, measured once on the same history and gating nothing: the share of trades whose favourable
+  excursion reaches +1R, +2R and +3R before their exit, and their median holding days - STRONG trades', or the
+  rule's where Gate S disqualifies. The excursion runs from the day after entry to the exit day, the exit day's
+  favourable extreme left out where the exit is a stop.
+Display rules: entry zone C_t +/- 0.25*U. LONG: a mark price above the zone -> a limit at its top; inside it ->
+  at market; below it and more than 0.25*U above the stop -> at market; nearer the stop -> no entry. SHORT
+  mirrored. Stop: the rule's own level. Size = risk * deposit / |entry - stop|. Isolated leverage at most
+  floor(1 / (1.5*|entry - stop|/entry + 0.01)), never above 20. Targets C_t +/- k*U, k = 1, 2, 3, each with its
+  measured share. Valid until the next close, 00:00 UTC, 04:00 in Batumi.
+Forward records, the rule's and the STRONG strategy's, from the close of 2026-10-28; each read once at 365
+  days by an Executor TZ: one-sided t-test on the daily portfolio R, PROVEN at p <= 0.005, DISPROVEN at
+  p <= 0.005 the other way, otherwise UNDECIDABLE. Running figures decide nothing.
+Sizing: deposit 10,000 USDT and risk 0.5% a trade by default, 1% at most; all open signals together at most 5%.
