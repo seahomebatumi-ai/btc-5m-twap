@@ -1,0 +1,17 @@
+# btc-5m-twap: the reward book's archive, its closed slots' stream files moved verbatim to a Release (TZ-34).
+# Started by btc-rewardbook-archive.timer alone; installed byte for byte as /etc/systemd/system/btc-rewardbook-archive.service.
+[Unit]
+Description=btc-5m-twap reward book archive, the stream files of closed slots to a Release
+Wants=network-online.target
+After=network-online.target time-sync.target btc-rewardbook.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/lib/btc-rewardbook-archive
+ExecStart=/root/tz04a-env/venv/bin/python -B -u /root/btc-rewardbook-archive-svc/tz34-rewardbook-archive-timer.py run
+Restart=no
+TimeoutStartSec=21600
+Nice=19
+MemoryMax=128M
+StandardOutput=append:/var/lib/btc-rewardbook-archive/archive.log
+StandardError=append:/var/lib/btc-rewardbook-archive/archive.log
