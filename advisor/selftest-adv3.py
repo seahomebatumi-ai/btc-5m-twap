@@ -104,6 +104,15 @@ check('three cards, each with size 50 USDT of risk', len(rep['cards']) == 3
       and all(abs(cd['qty'] * abs(cd['entry'] - cd['stop']) - 50) < 1e-9 for cd in rep['cards']))
 check('the message holds its sections', all(k in msg for k in ('ТОП-3', '⛔ Стоп', '🎯', 'Действует до 04:00',
                                                                'Уверенность', 'Остальные сигналы')))
+check('each card holds its basis and its invalidation, ranks 1 to 3', msg.count('Основание: сумма знаков') == 3
+      and msg.count('Инвалидация: цена') == 3 and [cd['rank'] for cd in rep['cards']] == [1, 2, 3])
+check('the message holds the forward book and the six ratings', all(k in msg for k in (
+    'Форвард с 28.10', 'Оценка доверия', 'Надёжность системы: <b>1/5</b>', 'Уверенность в сделках:',
+    'STRONG обоснован: <b>нет</b>', 'Качество данных: <b>низкое</b>', 'Ожидаемая R на сделку: <b>не установлена</b>',
+    'Инвалидация: у каждой карточки')))
+bk = rep['book']['base']
+check('the book: opened is closed plus open, and the total is the sum of its two parts',
+      bk['opened'] == bk['closed'] + bk['open'] and abs(bk['total_R'] - (bk['closed_R'] + bk['open_R'])) < 1e-9)
 strong_card = dict(rep['cards'][0], strong=True)
 plain_card = dict(rep['cards'][0], strong=False)
 check('a STRONG card shows the STRONG shares 48 / 28 / 18%',
@@ -113,11 +122,16 @@ check('another card shows the rule\'s shares 23 / 13 / 8%',
 
 # 7. G-HISTORY's comparison: equal facts read equal, one changed fact reads DIFFERENT
 h = {k: {'trades': f['trades'], 'wins': f['wins'], 'mean_R': f['mean_R'] + 1e-6, 'median_days': f['median_days'],
-         'mfe': dict(f['mfe']), 'gate_H': f.get('gate_H'), 'gate_S': f.get('gate_S')} for k, f in a.FACTS.items()}
-check('G-HISTORY: 16 facts, all equal', len(a.facts_checks(h)) == 16 and all(ok for ok, _, _ in a.facts_checks(h).values()))
+         'mfe': dict(f['mfe']), 'gate_H': f.get('gate_H'), 'gate_S': f.get('gate_S'), 'p_up': f['p_up'] + 1e-6,
+         'top5_share': f['top5_share'] - 1e-6} for k, f in a.FACTS.items()}
+check('G-HISTORY: 20 facts, all equal', len(a.facts_checks(h)) == 20 and all(ok for ok, _, _ in a.facts_checks(h).values()))
 h['strong']['wins'] += 1
 check('G-HISTORY: a changed fact reads DIFFERENT', [k for k, (ok, _, _) in a.facts_checks(h).items() if not ok]
       == ['strong wins'])
+h['strong']['wins'] -= 1
+h['strong']['top5_share'] = None
+check('G-HISTORY: a top-5 share not derived reads DIFFERENT, never an error', [k for k, (ok, _, _) in a.facts_checks(h).items()
+                                                                              if not ok] == ['strong top-5 share'])
 
 # 8. the live readers on stand-in replies: funding paged by 1,000, intervals 8 h unless adjusted, marks and the card
 calls = []
@@ -151,5 +165,37 @@ rep2 = a.report(cs, funds, {k + 'USDT': (cs[k][max(cs[k])][3], 0.0001) for k in 
 hours = {cd['coin']: cd['funding_h'] for cd in rep2['cards']}
 check('a card carries its funding interval: 4 h adjusted, 8 h otherwise',
       all(h == (4 if c == a.COINS[0] else 8) for c, h in hours.items()) and rep2['marks_ok'])
+
+# 9. the forward book of check 1's series by hand: one closed stop, one open short that only collects funding
+fb = a.forward_book(trades, daily, [pos])
+open_R = (-0.001 * 145.0 + 49 * 0.0003 * 145.0) / 16.6   # entry cost at 145; 49 flat days a short is paid 0.03% a day
+check('the book of one stop and one open short', fb['opened'] == 2 and fb['closed'] == 1 and fb['stops'] == 1
+      and fb['open'] == 1 and fb['days'] == 200)
+check('the book: the closed R is the trade\'s by hand, the open R is the short\'s by hand',
+      abs(fb['closed_R'] - (-62 - 0.001 * 362 - fund) / 6) < 1e-9 and abs(fb['open_R'] - open_R) < 1e-9)
+check('the book: the total over the days is the two parts\' sum', abs(fb['total_R'] - (fb['closed_R'] + fb['open_R'])) < 1e-9)
+
+# 10. the ratings: a function of recorded facts alone
+base = {'cards': [{'coin': 'A', 'mode': 'market'}, {'coin': 'B', 'mode': 'none'}, {'coin': 'C', 'mode': 'limit'}],
+        'missing': [], 'marks_ok': True, 'close_of': '2026-10-30',
+        'made_at_ms': int(dt.datetime(2026, 10, 31, 7, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)}
+tr = a.trust(base)
+check('trust: the system 1, a trade the system\'s or 0 where no entry is offered, STRONG not justified',
+      tr['system'] == 1 and tr['cards'] == {'A': 1, 'B': 0, 'C': 1} and tr['strong_justified'] is False)
+check('trust: quality low while unproven, the expectancy not established, the close of the day before fresh',
+      tr['quality'] == 'low' and not tr['expectancy_established'] and tr['served'] == len(a.COINS) and tr['fresh'])
+check('trust: a close two days old, or a report with no instant, is not fresh',
+      not a.trust(dict(base, close_of='2026-10-29'))['fresh'] and not a.trust(dict(base, made_at_ms=0))['fresh'])
+check('trust: no mark prices, no trade confidence', set(a.trust(dict(base, marks_ok=False))['cards'].values()) == {0})
+a.RELIABILITY = 4
+try:
+    t4 = a.trust(base)
+    t4m = a.trust(dict(base, missing=['XMR']))
+    t4s = a.trust(dict(base, close_of='2026-10-29'))
+finally:
+    a.RELIABILITY = 1
+check('trust at reliability 4: quality high where fresh and complete, medium where a coin is missing or the close is old, '
+      'the expectancy established', t4['quality'] == 'high' and t4m['quality'] == 'medium' and t4s['quality'] == 'medium'
+      and t4['expectancy_established'] and t4m['served'] == 41)
 
 print(f'SELFTEST-ADV3 PASS: {len(CHECKS)} of {len(CHECKS)} checks passed')
