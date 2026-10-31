@@ -24,11 +24,17 @@ UA = {'User-Agent': 'adv3-advisor/1'}
 ARCH = 'https://data.binance.vision/data/futures/um/'
 FAPI = 'https://fapi.binance.com'
 DAY = dt.timedelta(days=1)
-# Gate H, Gate S and the display facts, read once on the history to the close of 2026-10-27 (RULE-ADV-3)
+# Gate H, Gate S and the display facts, read once on the history to the close of 2026-10-27 (RULE-ADV-3); p_up (the
+# one-sided p of the daily portfolio R) and top5_share (the five best trades' R over the class's total R) are TZ-36's
+# two additions, re-derived by G-HISTORY like the rest
 FACTS = {'base': {'trades': 5265, 'wins': 1708, 'mean_R': 0.1576, 'median_days': 3, 'gate_H': 'NOT DISQUALIFIED',
-                  'mfe': {1: 0.2325, 2: 0.1297, 3: 0.0819}},
+                  'mfe': {1: 0.2325, 2: 0.1297, 3: 0.0819}, 'p_up': 0.0226, 'top5_share': 0.3042},
          'strong': {'trades': 253, 'wins': 83, 'mean_R': 0.5473, 'median_days': 19, 'gate_S': 'NOT DISQUALIFIED',
-                    'mfe': {1: 0.4783, 2: 0.2846, 3: 0.1779}}}
+                    'mfe': {1: 0.4783, 2: 0.2846, 3: 0.1779}, 'p_up': 0.0545, 'top5_share': 1.0093}}
+# The ratings' two inputs (TZ-36). RELIABILITY, 0 to 5: 1 = the history only, in sample and not disqualified; 0 = the
+# forward record read DISPROVEN; 4 = read PROVEN. STRONG_JUSTIFIED: True only where the STRONG strategy's own forward
+# record read PROVEN. Only a TZ that reads CANON PART VII's forward record, after 2027-10-28, moves either.
+RELIABILITY, STRONG_JUSTIFIED = 1, False
 
 
 # ---- fetching ----------------------------------------------------------------------------------------------
@@ -341,6 +347,31 @@ def stats(trades, daily):
     return out
 
 
+def forward_book(trades, daily, open_pos):
+    """One strategy's forward record with its parts apart (TZ-36): the trades opened, the closed ones with the R they
+    closed on and the stops among them, the positions still open with the R they hold so far, entry cost included,
+    and the total over the days, which is the two parts' sum."""
+    return {'days': len(daily), 'opened': len(trades) + len(open_pos), 'closed': len(trades),
+            'stops': sum(t['why'] == 'stop' for t in trades), 'open': len(open_pos),
+            'closed_R': sum(t['R'] for t in trades), 'open_R': sum(p['R'] for p in open_pos),
+            'total_R': sum(daily.values())}
+
+
+def trust(rep):
+    """The Boss's six ratings of 2026-10-31, each a function of recorded facts alone (TZ-36): the system's is
+    RELIABILITY; a trade's is the system's, and 0 where its card offers no entry or the mark prices failed; STRONG's
+    is STRONG_JUSTIFIED; the data's quality is low while the rule is unproven (RELIABILITY 1 or less), else high where
+    the close is the day before the report's, every coin was served and the mark prices came, else medium; the
+    expectancy is established only where the rule is proven (RELIABILITY 4 or more)."""
+    made = dt.datetime.fromtimestamp(rep['made_at_ms'] / 1000, dt.timezone.utc).date() if rep['made_at_ms'] else None
+    fresh = made is not None and rep['close_of'] == str(made - DAY)
+    complete = not rep['missing'] and rep['marks_ok']
+    return {'system': RELIABILITY, 'strong_justified': STRONG_JUSTIFIED, 'served': len(COINS) - len(rep['missing']),
+            'cards': {cd['coin']: RELIABILITY if cd['mode'] != 'none' and rep['marks_ok'] else 0 for cd in rep['cards']},
+            'quality': 'low' if RELIABILITY <= 1 else 'high' if fresh and complete else 'medium',
+            'fresh': fresh, 'complete': complete, 'expectancy_established': RELIABILITY >= 4}
+
+
 def funding_of(per_day, covered_days):
     """The rule's funding by day: the published sum where the source covers the day, else the base rate."""
     return lambda d: per_day.get(d, 0.0) if covered_days(d) else 3 * BASE_F
@@ -383,6 +414,8 @@ def history():
         last = max(d for d in cs[coin] if d <= HISTORY_TO)
         s_trades.append(dict(t, R=t['R'] - COST * cs[coin][last][3] / t['U'], why='open at the history cut'))
     base, strong = stats(base_trades, base_daily), stats(s_trades, s_daily)
+    for x, tr in ((base, base_trades), (strong, s_trades)):
+        x['top5_share'] = sum(sorted((t['R'] for t in tr), reverse=True)[:5]) / x['total_R'] if x['total_R'] > 0 else None
     base['gate_H'] = 'NOT DISQUALIFIED' if base['total_R'] > 0 else 'DISQUALIFIED'
     strong['gate_S'] = ('NOT DISQUALIFIED' if strong['total_R'] > 0 and strong['mean_R'] > base['mean_R']
                         else 'DISQUALIFIED')
@@ -415,19 +448,26 @@ def report(cs, funds, marks, deposit, risk, now_ms, missing=(), intervals=None):
         if coin not in rows:
             rows[coin] = {'signal': None, 'missing': coin in missing}
     s_trades, s_daily, s_open = simulate_strong({k: v for k, v in cs.items() if v}, st, funds, FORWARD_FROM, last)
-    b_trades, b_daily = [], {}
+    b_trades, b_daily, b_open = [], {}, []
     for coin, c in cs.items():
         if not c:
             continue
-        tf, df, _ = simulate(c, funds.get(coin, lambda d: 3 * BASE_F), FORWARD_FROM, last)
+        tf, df, pf = simulate(c, funds.get(coin, lambda d: 3 * BASE_F), FORWARD_FROM, last)
         b_trades += tf
+        b_open += [pf] if pf else []
         for d, x in df.items():
             b_daily[d] = b_daily.get(d, 0.0) + x
     cards = [card(coin, rows[coin], coin in strong, deposit, risk) for coin in top]
-    return {'rule': RULE, 'close_of': str(last), 'deposit': deposit, 'risk_pct': risk, 'top': top, 'strong': strong,
-            'cards': cards, 'rows': rows, 'strong_open': {k: str(v['entry']) for k, v in s_open.items()},
-            'forward': {'base': stats(b_trades, b_daily), 'strong': stats(s_trades, s_daily)},
-            'missing': [c for c in COINS if c in missing], 'marks_ok': bool(marks), 'made_at_ms': now_ms}
+    for n, cd in enumerate(cards, 1):
+        cd['rank'] = n
+    rep = {'rule': RULE, 'close_of': str(last), 'deposit': deposit, 'risk_pct': risk, 'top': top, 'strong': strong,
+           'cards': cards, 'rows': rows, 'strong_open': {k: str(v['entry']) for k, v in s_open.items()},
+           'forward': {'base': stats(b_trades, b_daily), 'strong': stats(s_trades, s_daily)},
+           'book': {'base': forward_book(b_trades, b_daily, b_open),
+                    'strong': forward_book(s_trades, s_daily, list(s_open.values()))},
+           'missing': [c for c in COINS if c in missing], 'marks_ok': bool(marks), 'made_at_ms': now_ms}
+    rep['trust'] = trust(rep)
+    return rep
 
 
 def card(coin, row, is_strong, deposit, risk):
@@ -440,7 +480,8 @@ def card(coin, row, is_strong, deposit, risk):
         mode, entry = (('limit', hi) if P > hi else ('market', P) if P > S + NEAR_STOP * U else ('none', None))
     else:
         mode, entry = (('limit', lo) if P < lo else ('market', P) if P < S - NEAR_STOP * U else ('none', None))
-    out = {'coin': coin, 'side': k, 'strong': is_strong, 'z': row['z'], 'close': C, 'U': U, 'stop': S, 'mark': P,
+    out = {'coin': coin, 'side': k, 'strong': is_strong, 'z': row['z'], 'sum': row.get('sum'), 'close': C, 'U': U,
+           'stop': S, 'mark': P,
            'zone': (lo, hi), 'mode': mode, 'entry': entry, 'since': row['since'], 'funding': row['funding'],
            'funding_h': row.get('funding_h'),
            'targets': [C + k * n * U for n in (1, 2, 3)]}
@@ -556,16 +597,67 @@ def message(rep, facts):
         lines.append(f"Все сигналы: {pct(100 * b['wins'] / b['trades'], 0)}% в плюс, в среднем "
                      f"{'+' if b['mean_R'] > 0 else ''}{pct(b['mean_R'], 2)} R, держатся ~{b['median_days']:.0f} дн.")
         lines.append('Прибыль дают редкие длинные тренды; большинство сделок закрывается небольшим убытком.')
-    fb, fs = rep['forward']['base'], rep['forward']['strong']
-    if fb['days']:
-        lines.append(f"Форвард с 28.10: {fb['days']} дн. · все сигналы {num(fb['total_R'], 3)} R · STRONG "
-                     f"{num(fs['total_R'], 3)} R. Доказанность проверяется после 28.10.2027.")
+    bb, bs = rep['book']['base'], rep['book']['strong']
+    if bb['days']:
+        lines += ['', f"<b>Форвард с 28.10</b> — день {bb['days']} из 365, бумажный портфель правила, не ваш счёт",
+                  book_line('Все сигналы', bb), book_line('STRONG', bs),
+                  'Доказанность проверяется после 28.10.2027; текущие R ничего не решают.']
     else:
         lines.append('Форвард начинается с закрытия 28.10; доказанность проверяется после 28.10.2027.')
+    lines += [''] + trust_lines(rep, facts)
     lines += ['', '<i>«Дошли» — доля прошлых сделок того же класса (★ STRONG или обычных), цена которых дошла до '
               'цели до выхода. R — результат в единицах риска сделки: −1 R — сработал стоп. Не инвестиционный '
               'совет: правило показывает состояние рынка; решение и риск — ваши.</i>']
     return '\n'.join(lines)
+
+
+def signed(x, places=2):
+    return f'{x:+.{places}f}'.replace('.', ',').replace('-', '−')
+
+
+def book_line(name, b):
+    """One strategy's forward line: the entries, the closed part and the open part apart, and the total over the market."""
+    r = lambda x: ('+' if x > 0 else '') + num(x, 3)
+    return (f"{name}: входов {b['opened']} · закрыто {b['closed']} ({r(b['closed_R'])} R) · "
+            f"в позиции {b['open']} ({r(b['open_R'])} R) · итого {r(b['total_R'])} R")
+
+
+def trust_lines(rep, facts):
+    """The Boss's six ratings with their reasons (TZ-36). Every figure is a frozen fact, a count of this report or a
+    figure computed from them; nothing here is a judgement of this moment."""
+    tr, bb, bs = rep['trust'], rep['book']['base'], rep['book']['strong']
+    b, s = (facts or {}).get('base'), (facts or {}).get('strong')
+    status = {0: 'опровергнута форвардом', 1: 'не проверена', 4: 'доказана форвардом'}.get(tr['system'], '')
+    why = ''
+    if tr['system'] <= 1 and b and s:
+        why = (f": история в выборке, p {pct(b['p_up'], 4)} у всех сигналов и {pct(s['p_up'], 4)} у STRONG при пороге "
+               f"форварда 0,005; форвард {bb['days']} из 365 дн.")
+    out = ['<b>Оценка доверия</b>', f"Надёжность системы: <b>{tr['system']}/5</b> — {status}{why}"]
+    if tr['cards']:
+        out.append('Уверенность в сделках: ' + ' · '.join(f'{c} {v}/5' for c, v in tr['cards'].items())
+                   + ' — не выше надёжности системы; 0 — входа нет; правило не даёт вероятности на сделку')
+    else:
+        out.append('Уверенность в сделках: сделок нет')
+    evidence = ''
+    if s:
+        rest = s['mean_R'] * s['trades'] * (1 - s['top5_share']) / (s['trades'] - 5)
+        evidence = (f" — история в выборке: p {pct(s['p_up'], 4)}, пять лучших сделок = {pct(100 * s['top5_share'], 0)}% "
+                    f"её прибыли, остальные {num(rest, 2)} R на сделку; форвард: закрыто {bs['closed']} из {bs['opened']}")
+    out.append(f"STRONG обоснован: <b>{'да' if tr['strong_justified'] else 'нет'}</b>{evidence}")
+    issues = (([] if tr['fresh'] else ['закрытие не вчерашнее']) + ([f"нет данных по {len(rep['missing'])} монетам"]
+              if rep['missing'] else []) + ([] if rep['marks_ok'] else ['нет текущих цен Binance']))
+    data = ('данные свежие и полные' if not issues else 'данные: ' + ', '.join(issues)) +         f" (закрытие {ddmm(rep['close_of'])}, {tr['served']} из {len(COINS)} монет)"
+    quality = {'low': 'низкое', 'medium': 'среднее', 'high': 'высокое'}[tr['quality']]
+    out.append(f"Качество данных: <b>{quality}</b> — {data}{'' if tr['system'] > 1 else '; правило не проверено'}")
+    if tr['expectancy_established']:
+        out.append('Ожидаемая R на сделку: берётся из прочитанного форварда')
+    elif b and s:
+        out.append(f"Ожидаемая R на сделку: <b>не установлена</b> — история в выборке: {signed(b['mean_R'])} R у всех "
+                   f"сигналов и {signed(s['mean_R'])} R у STRONG, это не прогноз")
+    else:
+        out.append('Ожидаемая R на сделку: <b>не установлена</b>')
+    out.append('Инвалидация: у каждой карточки — стоп и смена сигнала')
+    return out
 
 
 def card_lines(cd, facts):
@@ -593,6 +685,10 @@ def card_lines(cd, facts):
         out.append(f"🎯 {price(t)} ({'+' if move > 0 else ''}{pct(move)}%){share}")
     if cd['entry'] is not None:
         out.append(f"Объём: {num(cd['qty'])} {cd['coin']} ≈ {usdt(cd['notional'])} USDT · плечо ≤ {cd['leverage']}× изол.")
+    if cd.get('sum') is not None and cd.get('rank'):
+        out.append(f"Основание: сумма знаков {signed(cd['sum'], 0)} из ±4 · z {signed(cd['z'])} · ранг {cd['rank']} из {TOP_N}")
+    out.append(f"Инвалидация: {'цена ≤' if cd['side'] > 0 else 'цена ≥'} {price(cd['stop'])} или закрытие дня с суммой "
+               f"знаков {'ниже +2' if cd['side'] > 0 else 'выше −2'}")
     extra = []
     if cd['since']:
         extra.append(f"Сигнал с {ddmm(cd['since'])}")
@@ -623,8 +719,8 @@ def live(source, deposit, risk):
 
 
 def facts_checks(h):
-    """G-HISTORY: each frozen fact against the history just derived - counts and verdicts exact, shares and mean R
-    at FACTS' four decimals. {name: (equal, derived, FACTS)}."""
+    """G-HISTORY: each frozen fact against the history just derived - counts and verdicts exact, shares, mean R, p and
+    the top-5 share at FACTS' four decimals. {name: (equal, derived, FACTS)}."""
     out = {}
     for k in ('base', 'strong'):
         f, x = FACTS[k], h[k]
@@ -632,6 +728,9 @@ def facts_checks(h):
         out[f'{k} wins'] = (x['wins'] == f['wins'], x['wins'], f['wins'])
         out[f'{k} mean R'] = (round(x['mean_R'], 4) == f['mean_R'], x['mean_R'], f['mean_R'])
         out[f'{k} median days'] = (x['median_days'] == f['median_days'], x['median_days'], f['median_days'])
+        out[f'{k} p'] = (round(x['p_up'], 4) == f['p_up'], x['p_up'], f['p_up'])
+        t5 = x['top5_share']
+        out[f'{k} top-5 share'] = (t5 is not None and round(t5, 4) == f['top5_share'], t5, f['top5_share'])
         for n in (1, 2, 3):
             out[f'{k} share +{n}R'] = (round(x['mfe'][n], 4) == f['mfe'][n], x['mfe'][n], f['mfe'][n])
     out['gate H'] = (h['base']['gate_H'] == FACTS['base']['gate_H'], h['base']['gate_H'], FACTS['base']['gate_H'])
