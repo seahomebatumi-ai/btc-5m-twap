@@ -9,6 +9,8 @@
 # --compare, the archive's last 14 daily candles against fapi.binance.com's (G-SAME). The bot imports this file.
 # Since TZ-39 the message carries no methodology: each card its confidence, the rung of CANON PART VII's evidence ladder,
 # and its reach shares without survivorship (PIT); the six ratings and what they rest on are the assessment, «оценка».
+# Since TZ-40 a message may carry, after its TOP-N, the cards the bot marks extra - every coin STRONG at any rank beyond the
+# list (adv3-bot.py's strong_all) - and a STRONG card beyond the TOP-3 says so: the frozen rule's STRONG is the TOP-3's.
 import argparse, bisect, datetime as dt, hashlib, html, io, json, math, statistics, sys, time, urllib.error, \
     urllib.parse, urllib.request, zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -41,11 +43,12 @@ RELIABILITY, STRONG_JUSTIFIED = 1, False
 # validation-report.md, §2.7), in sample, an exploration that moves no rung. The cards quote the reach shares without
 # survivorship (E4: the 609 contracts of L, the Boss's 42 among them, an entry only on a day of 10,000,000 USDT median quote
 # volume); the ratings quote the rule on the 570 contracts the Boss did not pick (E1, E2) and STRONG's median on 500 random
-# lists of 42 (E5) - never what a STRONG trade made on the 42 (CANON PART VII).
+# lists of 42 (E5) - never what a STRONG trade made on the 42 (CANON PART VII). Since TZ-40 the assessment quotes E6 too:
+# the STRONG strategy on the same 609 contracts with three places and with seven, mean R a trade (mean_R_P3, mean_R_P7).
 PIT = {'base': {'mfe': {1: 0.2318, 2: 0.1257, 3: 0.0759}, 'mean_R_G': 0.0403, 'trades_G': 19002, 'p_G': 0.0735,
                  'contracts_G': 570},
        'strong': {'mfe': {1: 0.4717, 2: 0.2906, 3: 0.1887}, 'p_G': 0.1100, 'mean_R_lists': 0.2195, 'lists': 500,
-                  'lists_positive': 0.8600, 'top5_share': 0.9875}}
+                  'lists_positive': 0.8600, 'top5_share': 0.9875, 'mean_R_P3': 0.7962, 'mean_R_P7': 0.5084}}
 # CANON PART VII's evidence ladder: for each rung, the card's line and the ratings' sentence.
 LADDER = {0: ('направление не публикуется', 'история или форвард дисквалифицировали правило: направление не публикуется'),
           1: ('правило не доказано', 'история на ваших 42 монетах — в выборке, на монетах, выбранных в 2026, — не '
@@ -55,6 +58,10 @@ LADDER = {0: ('направление не публикуется', 'истор�
           3: ('подтверждено и не опровергнуто', 'PIT-запись подтвердила правило, и год на ваших монетах этого не опроверг'),
           4: ('доказано на ваших монетах', 'форвард доказал правило на монетах, которыми вы торгуете'),
           5: ('доказано и держится', 'форвард доказал правило, и следующий год это подтвердил')}
+# TZ-40: the label of a STRONG card beyond the TOP-3, and the one line a message carries wherever it shows such a card.
+BEYOND_TAG = ' · вне ТОП-3'
+BEYOND = ('<i>★ STRONG вне ТОП-3 — четыре знака совпадают и |z| ≥ 1, но это не измеряемая стратегия: форвард STRONG ведётся '
+          'только по ТОП-3</i>')
 
 
 # ---- fetching ----------------------------------------------------------------------------------------------
@@ -568,7 +575,9 @@ def message(rep, facts, head=(), tail=()):
     """The Boss's message in Russian, as Telegram HTML, from the report and the frozen facts: the close, the day's changes,
     the cards - each with its confidence, the rung of the evidence ladder or 0 where it offers no entry - and the other
     signals; head's lines follow the header and tail's precede the other signals (the bot's events, candidates and the
-    trades its cards offered). The methodology, the forward record and the six ratings are the assessment's, «оценка» (TZ-39)."""
+    trades its cards offered). The methodology, the forward record and the six ratings are the assessment's, «оценка» (TZ-39).
+    The cards marked extra follow the TOP-N under their own heading, and one line says what a STRONG card beyond the TOP-3 is
+    wherever the message shows one (TZ-40)."""
     last = dt.date.fromisoformat(rep['close_of'])
     until = last + 2 * DAY
     lines = ['📊 <b>ADV-3 · сигналы Binance Futures</b>',
@@ -597,13 +606,21 @@ def message(rep, facts, head=(), tail=()):
         lines.append('Изменений нет.')
     lines.append('')
     shown = [cd['coin'] for cd in rep['cards']]
-    if rep['cards']:
-        conf = (rep.get('trust') or {}).get('cards') or {}
+    main = [cd for cd in rep['cards'] if not cd.get('extra')]
+    extra = [cd for cd in rep['cards'] if cd.get('extra')]
+    conf = (rep.get('trust') or {}).get('cards') or {}
+    if main:
         lines.append(f"<b>ТОП-{rep.get('n', TOP_N)} по силе тренда</b>")
-        for cd in rep['cards']:
+        for cd in main:
             lines += [''] + card_lines(cd, facts, conf.get(cd['coin']))
     else:
         lines.append('<b>Открытых сигналов нет</b> — все монеты вне рынка.')
+    if extra:
+        lines += ['', f"<b>Дополнительные STRONG-кандидаты</b> — за ТОП-{rep.get('n', TOP_N)}: те же условия STRONG и тот же расчёт"]
+        for cd in extra:
+            lines += [''] + card_lines(cd, facts, conf.get(cd['coin']))
+    if any(cd.get('strong') and (cd.get('rank') or 0) > TOP_N for cd in rep['cards']):
+        lines += ['', BEYOND]
     if tail:
         lines += [''] + list(tail)
     longs = [c for c in COINS if rows[c].get('signal') == 1 and c not in shown]
@@ -627,7 +644,8 @@ def message(rep, facts, head=(), tail=()):
 
 def assessment(rep, facts):
     """The «оценка» reply (TZ-39): the rung of the evidence ladder and the next readings, the six ratings, the forward record in
-    its parts and what the history says in figures without survivorship - the methodology the pushed messages no longer carry."""
+    its parts and what the history says in figures without survivorship - the methodology the pushed messages no longer carry -
+    and, since TZ-40, what a STRONG card beyond the TOP-3 is and what TZ-38's E6 measured of STRONG with seven places."""
     rung = rep['trust']['system']
     b, s = PIT['base'], PIT['strong']
     lines = ['🧭 <b>ADV-3 · оценка: на чём держится уверенность</b>', f"Закрытие дня {ddmm(rep['close_of'])} (UTC)", '',
@@ -656,6 +674,9 @@ def assessment(rep, facts):
               f"на {s['lists']} случайных списках из 42 — медиана {signed(s['mean_R_lists'])} R на сделку. На ваших 42 цифры "
               f"выше: список составлен в 2026, и отбор их завышает.{gates}",
               'Прибыль дают редкие длинные тренды; большинство сделок закрывается небольшим убытком.',
+              f"★ STRONG вне ТОП-3 — те же условия и тот же расчёт, но не измеряемая стратегия: форвард STRONG ведётся по ТОП-3. "
+              f"На всех контрактах Binance STRONG на семи местах дал {signed(s['mean_R_P7'])} R на сделку против "
+              f"{signed(s['mean_R_P3'])} на трёх; дальше седьмого места не измерено.",
               '', '<i>«Дошли» — доля прошлых сделок того же класса (★ STRONG или обычных) на всех контрактах Binance, без отбора '
                   'выживших, цена которых дошла до цели до выхода. R — результат в единицах риска сделки: −1 R — сработал стоп. '
                   'Не инвестиционный совет: правило показывает состояние рынка; решение и риск — ваши.</i>']
@@ -710,10 +731,12 @@ def trust_lines(rep, facts):
 def card_lines(cd, facts, confidence=None):
     """One card: a line each for entry, stop, the three targets with the shares of past trades of its class that reached
     them (TZ-38's, without survivorship: PIT), size, basis and invalidation, and - where confidence is given - its
-    confidence: the rung of the evidence ladder, or 0 where the card offers no entry or no current price came."""
+    confidence: the rung of the evidence ladder, or 0 where the card offers no entry or no current price came. A STRONG card
+    whose rank is beyond the TOP-3 carries BEYOND_TAG, and a card marked extra gives its rank beyond the list (TZ-40)."""
     side = 'LONG' if cd['side'] > 0 else 'SHORT'
     dot = '🟢' if cd['side'] > 0 else '🔴'
-    out = [f"{dot} <b>{cd['coin']} · {side}</b>" + (' · ★ STRONG' if cd['strong'] else '')]
+    tag = (' · ★ STRONG' + (BEYOND_TAG if (cd.get('rank') or 0) > TOP_N else '')) if cd['strong'] else ''
+    out = [f"{dot} <b>{cd['coin']} · {side}</b>" + tag]
     lo, hi = cd['zone']
     if cd['mode'] == 'market':
         out += [f"Вход: <b>по рынку</b> ≈ {price(cd['entry'])}", f"   зона входа {price(lo)}–{price(hi)}"]
@@ -735,8 +758,9 @@ def card_lines(cd, facts, confidence=None):
     if cd['entry'] is not None:
         out.append(f"Объём: {num(cd['qty'])} {cd['coin']} ≈ {usdt(cd['notional'])} USDT · плечо ≤ {cd['leverage']}× изол.")
     if cd.get('sum') is not None and cd.get('rank'):
-        out.append(f"Основание: сумма знаков {signed(cd['sum'], 0)} из ±4 · z {signed(cd['z'])} · ранг {cd['rank']} из "
-                   f"{cd.get('of', TOP_N)}")
+        where = (f"ранг {cd['rank']} — за ТОП-{cd.get('of', TOP_N)}" if cd.get('extra')
+                 else f"ранг {cd['rank']} из {cd.get('of', TOP_N)}")
+        out.append(f"Основание: сумма знаков {signed(cd['sum'], 0)} из ±4 · z {signed(cd['z'])} · {where}")
     out.append(f"Инвалидация: {'цена ≤' if cd['side'] > 0 else 'цена ≥'} {price(cd['stop'])} или закрытие дня с суммой "
                f"знаков {'ниже +2' if cd['side'] > 0 else 'выше −2'}")
     extra = []
