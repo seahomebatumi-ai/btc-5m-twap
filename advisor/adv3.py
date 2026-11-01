@@ -7,6 +7,8 @@
 # Modes: the message of the latest close (--source fapi, the default, or archive; --json for the report);
 # --history PATH, Gate H, Gate S and the display facts re-derived from the archive and read against FACTS (G-HISTORY);
 # --compare, the archive's last 14 daily candles against fapi.binance.com's (G-SAME). The bot imports this file.
+# Since TZ-39 the message carries no methodology: each card its confidence, the rung of CANON PART VII's evidence ladder,
+# and its reach shares without survivorship (PIT); the six ratings and what they rest on are the assessment, «оценка».
 import argparse, bisect, datetime as dt, hashlib, html, io, json, math, statistics, sys, time, urllib.error, \
     urllib.parse, urllib.request, zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -31,10 +33,28 @@ FACTS = {'base': {'trades': 5265, 'wins': 1708, 'mean_R': 0.1576, 'median_days':
                   'mfe': {1: 0.2325, 2: 0.1297, 3: 0.0819}, 'p_up': 0.0226, 'top5_share': 0.3042},
          'strong': {'trades': 253, 'wins': 83, 'mean_R': 0.5473, 'median_days': 19, 'gate_S': 'NOT DISQUALIFIED',
                     'mfe': {1: 0.4783, 2: 0.2846, 3: 0.1779}, 'p_up': 0.0545, 'top5_share': 1.0093}}
-# The ratings' two inputs (TZ-36). RELIABILITY, 0 to 5: 1 = the history only, in sample and not disqualified; 0 = the
-# forward record read DISPROVEN; 4 = read PROVEN. STRONG_JUSTIFIED: True only where the STRONG strategy's own forward
-# record read PROVEN. Only a TZ that reads CANON PART VII's forward record, after 2027-10-28, moves either.
+# The ratings' two inputs (TZ-36). RELIABILITY is the rung of CANON PART VII's evidence ladder, 0 to 5 - LADDER below says
+# what each holds; 1 = the history on the Boss's 42, in sample and not disqualified. STRONG_JUSTIFIED: True only where the
+# STRONG strategy's own forward record read PROVEN. Only a TZ that reads one of PART VII's records moves either.
 RELIABILITY, STRONG_JUSTIFIED = 1, False
+# TZ-38's figures, measured on Binance's whole USDⓈ-M archive to the close of 2026-10-27 (CryptoReports/TZ-38-adv3-pit-
+# validation-report.md, §2.7), in sample, an exploration that moves no rung. The cards quote the reach shares without
+# survivorship (E4: the 609 contracts of L, the Boss's 42 among them, an entry only on a day of 10,000,000 USDT median quote
+# volume); the ratings quote the rule on the 570 contracts the Boss did not pick (E1, E2) and STRONG's median on 500 random
+# lists of 42 (E5) - never what a STRONG trade made on the 42 (CANON PART VII).
+PIT = {'base': {'mfe': {1: 0.2318, 2: 0.1257, 3: 0.0759}, 'mean_R_G': 0.0403, 'trades_G': 19002, 'p_G': 0.0735,
+                 'contracts_G': 570},
+       'strong': {'mfe': {1: 0.4717, 2: 0.2906, 3: 0.1887}, 'p_G': 0.1100, 'mean_R_lists': 0.2195, 'lists': 500,
+                  'lists_positive': 0.8600, 'top5_share': 0.9875}}
+# CANON PART VII's evidence ladder: for each rung, the card's line and the ratings' sentence.
+LADDER = {0: ('направление не публикуется', 'история или форвард дисквалифицировали правило: направление не публикуется'),
+          1: ('правило не доказано', 'история на ваших 42 монетах — в выборке, на монетах, выбранных в 2026, — не '
+                                     'дисквалифицировала правило; это не подтверждение'),
+          2: ('подтверждено вне вашего списка', 'PIT-запись подтвердила: правило зарабатывает на контрактах, которые вы не '
+                                                'выбирали, на данных, которых никто не читал'),
+          3: ('подтверждено и не опровергнуто', 'PIT-запись подтвердила правило, и год на ваших монетах этого не опроверг'),
+          4: ('доказано на ваших монетах', 'форвард доказал правило на монетах, которыми вы торгуете'),
+          5: ('доказано и держится', 'форвард доказал правило, и следующий год это подтвердил')}
 
 
 # ---- fetching ----------------------------------------------------------------------------------------------
@@ -528,9 +548,27 @@ def ddmm(day):
     return f'{day[8:10]}.{day[5:7]}'
 
 
-def message(rep, facts):
-    """The Boss's message in Russian, as Telegram HTML, from the report and the frozen history facts."""
-    e = html.escape
+def changes(rep):
+    """The day's changes among the coins, each coin's signal at the close against the close before it: ([(coin, side)] new,
+    [coin] out of a long, [coin] out of a short, [(coin, side)] reversed)."""
+    rows, sides = rep['rows'], (1, -1)
+    new, out_long, out_short, flips = [], [], [], []
+    for coin in COINS:
+        now, before = rows[coin].get('signal'), rows[coin].get('prev')
+        if now in sides and before not in sides:
+            new.append((coin, now))
+        elif now not in sides and before in sides:
+            (out_long if before > 0 else out_short).append(coin)
+        elif now in sides and before in sides and now != before:
+            flips.append((coin, now))
+    return new, out_long, out_short, flips
+
+
+def message(rep, facts, head=(), tail=()):
+    """The Boss's message in Russian, as Telegram HTML, from the report and the frozen facts: the close, the day's changes,
+    the cards - each with its confidence, the rung of the evidence ladder or 0 where it offers no entry - and the other
+    signals; head's lines follow the header and tail's precede the other signals (the bot's events, candidates and the
+    trades its cards offered). The methodology, the forward record and the six ratings are the assessment's, «оценка» (TZ-39)."""
     last = dt.date.fromisoformat(rep['close_of'])
     until = last + 2 * DAY
     lines = ['📊 <b>ADV-3 · сигналы Binance Futures</b>',
@@ -540,41 +578,36 @@ def message(rep, facts):
              f"{num(rep['deposit'] * rep['risk_pct'] / 100, 4)} USDT на сделку · все сделки вместе ≤ {pct(RISK_ALL, 0)}%"]
     if not rep.get('marks_ok', True):
         lines.append('⚠️ Текущие цены Binance недоступны: вход посчитан от цены закрытия')
+    if head:
+        lines += [''] + list(head)
     lines.append('')
     rows = rep['rows']
     word = {1: 'ЛОНГ', -1: 'ШОРТ'}
-    new, out_long, out_short, flips = [], [], [], []
-    for coin in COINS:
-        now, before = rows[coin].get('signal'), rows[coin].get('prev')
-        if now in word and before not in word:
-            new.append(f'{coin} {word[now]}')
-        elif now not in word and before in word:
-            (out_long if before > 0 else out_short).append(coin)
-        elif now in word and before in word and now != before:
-            flips.append(f'{coin} в {word[now]}')
+    new, out_long, out_short, flips = changes(rep)
     lines.append('<b>Изменения за день</b>')
     if new:
-        lines.append('🆕 Новые: ' + ', '.join(new))
+        lines.append('🆕 Новые: ' + ', '.join(f'{coin} {word[k]}' for coin, k in new))
     if out_long or out_short:
         parts = ([', '.join(out_long) + ' из лонга'] if out_long else []) + ([', '.join(out_short) + ' из шорта']
                                                                            if out_short else [])
         lines.append('🚪 Выход: ' + ' · '.join(parts))
     if flips:
-        lines.append('🔄 Разворот: ' + ', '.join(flips))
+        lines.append('🔄 Разворот: ' + ', '.join(f'{coin} в {word[k]}' for coin, k in flips))
     if not (new or out_long or out_short or flips):
         lines.append('Изменений нет.')
     lines.append('')
+    shown = [cd['coin'] for cd in rep['cards']]
     if rep['cards']:
-        lines.append('<b>ТОП-3 по силе тренда</b>')
+        conf = (rep.get('trust') or {}).get('cards') or {}
+        lines.append(f"<b>ТОП-{rep.get('n', TOP_N)} по силе тренда</b>")
         for cd in rep['cards']:
-            lines += [''] + card_lines(cd, facts)
+            lines += [''] + card_lines(cd, facts, conf.get(cd['coin']))
     else:
         lines.append('<b>Открытых сигналов нет</b> — все монеты вне рынка.')
-    if rep['strong_open']:
-        held = ', '.join(f'{k} с {ddmm(v)}' for k, v in rep['strong_open'].items())
-        lines += ['', f'<b>Открытые STRONG-сделки правила:</b> {e(held)}']
-    longs = [c for c in COINS if rows[c].get('signal') == 1 and c not in rep['top']]
-    shorts = [c for c in COINS if rows[c].get('signal') == -1 and c not in rep['top']]
+    if tail:
+        lines += [''] + list(tail)
+    longs = [c for c in COINS if rows[c].get('signal') == 1 and c not in shown]
+    shorts = [c for c in COINS if rows[c].get('signal') == -1 and c not in shown]
     flat = [c for c in COINS if rows[c].get('signal') == 0]
     young = [c for c in COINS if rows[c].get('signal') is None and not rows[c].get('missing')]
     lost = [c for c in COINS if rows[c].get('missing')]
@@ -588,26 +621,44 @@ def message(rep, facts):
         lines.append('⏳ Мало истории для сигнала: ' + ', '.join(young))
     if lost:
         lines.append('⚠️ Binance не отдал данные: ' + ', '.join(lost))
-    lines += ['', '<b>Уверенность</b> — история 2020–2026, не доказательство']
-    if facts:
-        s, b = facts['strong'], facts['base']
-        if s.get('gate_S') == 'NOT DISQUALIFIED':
-            lines.append(f"STRONG: {pct(100 * s['wins'] / s['trades'], 0)}% сделок в плюс, в среднем "
-                         f"{'+' if s['mean_R'] > 0 else ''}{pct(s['mean_R'], 2)} R, держатся ~{s['median_days']:.0f} дн.")
-        lines.append(f"Все сигналы: {pct(100 * b['wins'] / b['trades'], 0)}% в плюс, в среднем "
-                     f"{'+' if b['mean_R'] > 0 else ''}{pct(b['mean_R'], 2)} R, держатся ~{b['median_days']:.0f} дн.")
-        lines.append('Прибыль дают редкие длинные тренды; большинство сделок закрывается небольшим убытком.')
+    lines += ['', '<i>Не инвестиционный совет · «оценка» — на чём держится уверенность</i>']
+    return '\n'.join(lines)
+
+
+def assessment(rep, facts):
+    """The «оценка» reply (TZ-39): the rung of the evidence ladder and the next readings, the six ratings, the forward record in
+    its parts and what the history says in figures without survivorship - the methodology the pushed messages no longer carry."""
+    rung = rep['trust']['system']
+    b, s = PIT['base'], PIT['strong']
+    lines = ['🧭 <b>ADV-3 · оценка: на чём держится уверенность</b>', f"Закрытие дня {ddmm(rep['close_of'])} (UTC)", '',
+             f"Уверенность: <b>{rung}/5</b> — рубеж {rung} из 5 лестницы доказательств: {LADDER[rung][0]}."]
+    if rung < 4:
+        lines.append('Следующие чтения: форвард правила — после закрытия 28.10.2027; PIT-запись на контрактах, которые вы не '
+                     'выбирали, — после закрытия 31.10.2027. Шанс, что они поднимут рейтинг, — не больше примерно 1 из 7 '
+                     '[модель]; рейтинг двигает только измерение.')
+    lines += [''] + trust_lines(rep, facts)
     bb, bs = rep['book']['base'], rep['book']['strong']
     if bb['days']:
         lines += ['', f"<b>Форвард с 28.10</b> — день {bb['days']} из 365, бумажный портфель правила, не ваш счёт",
-                  book_line('Все сигналы', bb), book_line('STRONG', bs),
-                  'Доказанность проверяется после 28.10.2027; текущие R ничего не решают.']
+                  book_line('Все сигналы', bb), book_line('STRONG', bs)]
+        if rep['strong_open']:
+            lines.append('Открытые STRONG-сделки правила: ' + html.escape(', '.join(f'{k} с {ddmm(v)}' for k, v in rep['strong_open'].items())))
+        lines.append('Доказанность проверяется после 28.10.2027; текущие R ничего не решают.')
     else:
-        lines.append('Форвард начинается с закрытия 28.10; доказанность проверяется после 28.10.2027.')
-    lines += [''] + trust_lines(rep, facts)
-    lines += ['', '<i>«Дошли» — доля прошлых сделок того же класса (★ STRONG или обычных), цена которых дошла до '
-              'цели до выхода. R — результат в единицах риска сделки: −1 R — сработал стоп. Не инвестиционный '
-              'совет: правило показывает состояние рынка; решение и риск — ваши.</i>']
+        lines += ['', 'Форвард начинается с закрытия 28.10; доказанность проверяется после 28.10.2027.']
+    gates = ''
+    if facts:
+        ok = facts['base'].get('gate_H') == 'NOT DISQUALIFIED' and facts['strong'].get('gate_S') == 'NOT DISQUALIFIED'
+        gates = (' Проверки истории на ваших 42 (Gate H, Gate S): ' + ('не дисквалифицировано — это ничего не подтверждает.'
+                                                                       if ok else 'дисквалифицировано.'))
+    lines += ['', '<b>История</b> — 2020–2026, в выборке, не доказательство',
+              f"Вне вашего списка ({b['contracts_G']} контрактов): правило {signed(b['mean_R_G'])} R на сделку — не решено; STRONG "
+              f"на {s['lists']} случайных списках из 42 — медиана {signed(s['mean_R_lists'])} R на сделку. На ваших 42 цифры "
+              f"выше: список составлен в 2026, и отбор их завышает.{gates}",
+              'Прибыль дают редкие длинные тренды; большинство сделок закрывается небольшим убытком.',
+              '', '<i>«Дошли» — доля прошлых сделок того же класса (★ STRONG или обычных) на всех контрактах Binance, без отбора '
+                  'выживших, цена которых дошла до цели до выхода. R — результат в единицах риска сделки: −1 R — сработал стоп. '
+                  'Не инвестиционный совет: правило показывает состояние рынка; решение и риск — ваши.</i>']
     return '\n'.join(lines)
 
 
@@ -623,45 +674,43 @@ def book_line(name, b):
 
 
 def trust_lines(rep, facts):
-    """The Boss's six ratings with their reasons (TZ-36). Every figure is a frozen fact, a count of this report or a
-    figure computed from them; nothing here is a judgement of this moment."""
+    """The Boss's six ratings with their reasons (TZ-36; since TZ-39 behind «оценка»). Every figure is a frozen fact, a count of
+    this report, a figure of TZ-38's exploration (PIT) or one computed from them; none is what a STRONG trade made on the
+    Boss's 42, and nothing here is a judgement of this moment."""
     tr, bb, bs = rep['trust'], rep['book']['base'], rep['book']['strong']
-    b, s = (facts or {}).get('base'), (facts or {}).get('strong')
-    status = {0: 'опровергнута форвардом', 1: 'не проверена', 4: 'доказана форвардом'}.get(tr['system'], '')
-    why = ''
-    if tr['system'] <= 1 and b and s:
-        why = (f": история в выборке, p {pct(b['p_up'], 4)} у всех сигналов и {pct(s['p_up'], 4)} у STRONG при пороге "
-               f"форварда 0,005; форвард {bb['days']} из 365 дн.")
-    out = ['<b>Оценка доверия</b>', f"Надёжность системы: <b>{tr['system']}/5</b> — {status}{why}"]
+    b, s = PIT['base'], PIT['strong']
+    why = (f"; вне вашего списка правило не решено (p {pct(b['p_G'], 2)} на {b['contracts_G']} контрактах); форвард "
+           f"{bb['days']} из 365 дн." if tr['system'] <= 1 else f"; форвард {bb['days']} из 365 дн.")
+    out = ['<b>Оценка доверия</b>', f"Надёжность системы: <b>{tr['system']}/5</b> — {LADDER[tr['system']][1]}{why}"]
     if tr['cards']:
         out.append('Уверенность в сделках: ' + ' · '.join(f'{c} {v}/5' for c, v in tr['cards'].items())
                    + ' — не выше надёжности системы; 0 — входа нет; правило не даёт вероятности на сделку')
     else:
         out.append('Уверенность в сделках: сделок нет')
-    evidence = ''
-    if s:
-        rest = s['mean_R'] * s['trades'] * (1 - s['top5_share']) / (s['trades'] - 5)
-        evidence = (f" — история в выборке: p {pct(s['p_up'], 4)}, пять лучших сделок = {pct(100 * s['top5_share'], 0)}% "
-                    f"её прибыли, остальные {num(rest, 2)} R на сделку; форвард: закрыто {bs['closed']} из {bs['opened']}")
+    evidence = (f" — вне вашего списка STRONG не решён (p {pct(s['p_G'], 2)}); на {s['lists']} случайных списках из 42 медиана "
+                f"{signed(s['mean_R_lists'])} R на сделку, в плюсе {pct(100 * s['lists_positive'], 0)}% списков; пять лучших "
+                f"сделок — {pct(100 * s['top5_share'], 0)}% прибыли; форвард: закрыто {bs['closed']} из {bs['opened']}")
     out.append(f"STRONG обоснован: <b>{'да' if tr['strong_justified'] else 'нет'}</b>{evidence}")
     issues = (([] if tr['fresh'] else ['закрытие не вчерашнее']) + ([f"нет данных по {len(rep['missing'])} монетам"]
               if rep['missing'] else []) + ([] if rep['marks_ok'] else ['нет текущих цен Binance']))
-    data = ('данные свежие и полные' if not issues else 'данные: ' + ', '.join(issues)) +         f" (закрытие {ddmm(rep['close_of'])}, {tr['served']} из {len(COINS)} монет)"
+    data = ('данные свежие и полные' if not issues else 'данные: ' + ', '.join(issues)) + \
+        f" (закрытие {ddmm(rep['close_of'])}, {tr['served']} из {len(COINS)} монет)"
     quality = {'low': 'низкое', 'medium': 'среднее', 'high': 'высокое'}[tr['quality']]
     out.append(f"Качество данных: <b>{quality}</b> — {data}{'' if tr['system'] > 1 else '; правило не проверено'}")
     if tr['expectancy_established']:
         out.append('Ожидаемая R на сделку: берётся из прочитанного форварда')
-    elif b and s:
-        out.append(f"Ожидаемая R на сделку: <b>не установлена</b> — история в выборке: {signed(b['mean_R'])} R у всех "
-                   f"сигналов и {signed(s['mean_R'])} R у STRONG, это не прогноз")
     else:
-        out.append('Ожидаемая R на сделку: <b>не установлена</b>')
+        out.append(f"Ожидаемая R на сделку: <b>не установлена</b> — вне вашего списка: правило {signed(b['mean_R_G'])} R на "
+                   f"сделку ({b['contracts_G']} контрактов, в выборке); STRONG — медиана {signed(s['mean_R_lists'])} R на "
+                   f"{s['lists']} случайных списках из 42; это не прогноз")
     out.append('Инвалидация: у каждой карточки — стоп и смена сигнала')
     return out
 
 
-def card_lines(cd, facts):
-    """One TOP-3 card: a line each for entry, stop, the three targets with their measured shares, and size."""
+def card_lines(cd, facts, confidence=None):
+    """One card: a line each for entry, stop, the three targets with the shares of past trades of its class that reached
+    them (TZ-38's, without survivorship: PIT), size, basis and invalidation, and - where confidence is given - its
+    confidence: the rung of the evidence ladder, or 0 where the card offers no entry or no current price came."""
     side = 'LONG' if cd['side'] > 0 else 'SHORT'
     dot = '🟢' if cd['side'] > 0 else '🔴'
     out = [f"{dot} <b>{cd['coin']} · {side}</b>" + (' · ★ STRONG' if cd['strong'] else '')]
@@ -675,10 +724,10 @@ def card_lines(cd, facts):
     ref = cd['entry'] if cd['entry'] is not None else cd['close']
     stop_pct = 100 * abs(ref - cd['stop']) / ref
     out.append(f"⛔ Стоп: <b>{price(cd['stop'])}</b> ({'−' if cd['side'] > 0 else '+'}{pct(stop_pct)}%)")
-    shares, whose = None, ''
+    shares = None
     if facts:
         use_strong = cd['strong'] and facts['strong'].get('gate_S') == 'NOT DISQUALIFIED'
-        shares = (facts['strong'] if use_strong else facts['base']).get('mfe')
+        shares = PIT['strong' if use_strong else 'base']['mfe']
     for n, t in zip((1, 2, 3), cd['targets']):
         move = 100 * (t - ref) / ref
         share = f' · дошли {pct(100 * shares[n], 0)}%' if shares else ''
@@ -686,7 +735,8 @@ def card_lines(cd, facts):
     if cd['entry'] is not None:
         out.append(f"Объём: {num(cd['qty'])} {cd['coin']} ≈ {usdt(cd['notional'])} USDT · плечо ≤ {cd['leverage']}× изол.")
     if cd.get('sum') is not None and cd.get('rank'):
-        out.append(f"Основание: сумма знаков {signed(cd['sum'], 0)} из ±4 · z {signed(cd['z'])} · ранг {cd['rank']} из {TOP_N}")
+        out.append(f"Основание: сумма знаков {signed(cd['sum'], 0)} из ±4 · z {signed(cd['z'])} · ранг {cd['rank']} из "
+                   f"{cd.get('of', TOP_N)}")
     out.append(f"Инвалидация: {'цена ≤' if cd['side'] > 0 else 'цена ≥'} {price(cd['stop'])} или закрытие дня с суммой "
                f"знаков {'ниже +2' if cd['side'] > 0 else 'выше −2'}")
     extra = []
@@ -697,6 +747,10 @@ def card_lines(cd, facts):
         extra.append(f"фандинг {'+' if cd['funding'] >= 0 else ''}{pct(100 * cd['funding'], 3)}%{period}")
     if extra:
         out.append(' · '.join(extra))
+    if confidence is not None:
+        why = ('входа нет' if cd['mode'] == 'none' else LADDER[RELIABILITY][0] if confidence or not RELIABILITY
+               else 'нет текущей цены Binance')
+        out.append(f"Уверенность: <b>{confidence}/5</b> — {why}")
     return out
 
 
