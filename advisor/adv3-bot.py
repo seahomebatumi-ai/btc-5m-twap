@@ -3,6 +3,9 @@
 # 00:10 UTC (04:10 in Batumi) the close's signals and at 12:10 UTC (16:10) the facts of the moment - the stops of the trades the
 # cards offered, the entry zones, the STRONG candidates - each loud only for an alert and one quiet line where it finds nothing;
 # and a journal of every check's state and every message sent. Standard library only; adv3.py lies beside it.
+# TZ-40: STRONG at every rank - four signs agreeing with the side and |z| at least the rule's STRONG_Z, whatever the rank - in
+# every view: the list's TOP-N, then every such coin beyond it; the allocation's first N that pass the limits, then every other
+# that passes them, each sized alone; the checks' candidates. The frozen rule's STRONG, its strategy and records stay the TOP-3's.
 # Modes: --serve (the unit's), --probe, --find-chat, --hello, --selftest.
 # Exits: 0 or SIGTERM, restarted by systemd; 3 without a token or a chat id and 4 where glibc refuses its two
 # settings, neither restarted; 1, an unexpected exception, restarted.
@@ -31,15 +34,18 @@ TOPN = re.compile(r'(?:топ|top)[\s\-\u2013]*(\d{1,2})(?!\d)', re.I)
 # share of a coin's mean daily quote volume a position may take, the discount for same-way correlation, the strength's cap, the
 # days of volume.
 STOP_MAX, MIN_NOTIONAL, LIQ_FRAC, CROWD, Z_CAP, LIQ_DAYS = 14.0, 5.0, 0.001, 0.5, 3.0, 7
-LIST_MAX = 7   # the longest list «сигнал топ N» shows; STRONG stays a label of the TOP-3
+LIST_MAX = 7   # the longest list «сигнал топ N» shows and the most trades an allocation places; STRONG beyond it is listed
+PACE = 1.1     # seconds between the parts of one message: Telegram asks for at most one message a second in a chat (TZ-40)
 SIDE, DOT = {1: 'LONG', -1: 'SHORT'}, {1: '🟢', -1: '🔴'}
 FOOTER = '<i>Не инвестиционный совет · «оценка» — на чём держится уверенность</i>'
 HELP = ('<b>ADV-3 · сигналы Binance Futures</b>\n'
         '«сигнал» — ТОП-3 правила сейчас: вход, стоп, цели и размер при депозите 10 000 USDT и риске 0,5% на сделку.\n'
-        '«сигнал топ 7» — то же для семи сильнейших, от 1 до 7; ★ STRONG бывает только в ТОП-3.\n'
+        '«сигнал топ 7» — то же для семи сильнейших, от 1 до 7. ★ STRONG — на любом месте рейтинга (четыре знака совпадают и '
+        '|z| ≥ 1); STRONG за пределами списка — ниже, в «Дополнительные STRONG-кандидаты», с той же карточкой.\n'
         '«сигнал 10000 топ 3» — распределить 10 000 USDT между сделками STRONG со стопом не дальше 14% входа; подошло меньше — '
-        'покажу меньше, ни одной — скажу. Риск — 0,5% бюджета на сделку, не больше 1%: «сигнал 10000 топ 3 1». Чего нельзя '
-        'разместить без превышения риска, остаётся свободным.\n'
+        'покажу меньше, ни одной — скажу, больше — остальные ниже, каждая посчитана как одна сделка. Риск — 0,5% бюджета на '
+        'сделку, не больше 1%: «сигнал 10000 топ 3 1». Чего нельзя разместить без превышения риска, остаётся свободным. '
+        '★ STRONG вне ТОП-3 — не измеряемая стратегия: форвард STRONG ведётся по ТОП-3.\n'
         '«оценка» — шесть оценок доверия и на чём они держатся.\n'
         'Проверки — в 04:10 и 16:10 по Батуми: в 04:10 сигналы закрытия дня, в 16:10 стопы и зоны входа. Со звуком — только '
         'когда задет стоп сделки, которую предлагала карточка, её сигнал закончился или появился новый STRONG, проходящий '
@@ -81,6 +87,14 @@ def malloc_tune():
         return False
 
 
+class TooMany(RuntimeError):
+    """Telegram's 429: too many requests, and the seconds it asks to wait (TZ-40)."""
+
+    def __init__(self, text, retry_after):
+        super().__init__(text)
+        self.retry_after = retry_after
+
+
 class Telegram:
     """The Bot API through one request function: every call is a JSON POST with UA as its User-Agent."""
 
@@ -88,6 +102,7 @@ class Telegram:
         self.token, self.chat = token, chat
 
     def call(self, method, http_timeout=30, **params):
+        """One call; a reply not ok raises - TooMany, with the retry_after Telegram names (5 s where it names none), for a 429."""
         req = urllib.request.Request(TG.format(token=self.token, method=method), data=json.dumps(params).encode(),
                                      headers={'User-Agent': UA, 'Content-Type': 'application/json'})
         try:
@@ -96,24 +111,42 @@ class Telegram:
         except urllib.error.HTTPError as e:
             out = json.loads(e.read() or b'{}')
         if not out.get('ok'):
-            raise RuntimeError(f"telegram {method}: {out.get('error_code')} {out.get('description')}")
+            text = f"telegram {method}: {out.get('error_code')} {out.get('description')}"
+            if out.get('error_code') == 429:
+                raise TooMany(text, int((out.get('parameters') or {}).get('retry_after') or 5))
+            raise RuntimeError(text)
         return out['result']
 
     def send(self, text, quiet=False):
-        """The text as HTML, in parts of at most LIMIT characters; a part Telegram cannot parse goes as plain text. quiet sends
-        every part without a notification (the Bot API's disable_notification)."""
+        """The text as HTML, in parts of at most LIMIT characters, PACE seconds apart; a part Telegram cannot parse goes as plain
+        text, and a part refused as too many requests waits the retry_after named, at most 60 s, and goes again, twice at most
+        (TZ-40). quiet sends every part without a notification (the Bot API's disable_notification)."""
         ids, extra = [], ({'disable_notification': True} if quiet else {})
-        for part in chunks(text):
-            try:
-                ids.append(self.call('sendMessage', chat_id=self.chat, text=part, parse_mode='HTML',
-                                     disable_web_page_preview=True, **extra)['message_id'])
-            except RuntimeError as e:
-                if 'parse entities' not in str(e):
-                    raise
-                plain = html.unescape(re.sub(r'</?[bi]>', '', part))
-                ids.append(self.call('sendMessage', chat_id=self.chat, text=plain,
-                                     disable_web_page_preview=True, **extra)['message_id'])
+        for k, part in enumerate(chunks(text)):
+            if k:
+                time.sleep(PACE)
+            for attempt in range(3):
+                try:
+                    ids.append(self.send_part(part, extra))
+                    break
+                except TooMany as e:
+                    if attempt == 2:
+                        raise
+                    time.sleep(min(e.retry_after, 60) + 1)
         return ids
+
+    def send_part(self, part, extra):
+        """One part as HTML, or as plain text where Telegram cannot parse it; its message id."""
+        try:
+            return self.call('sendMessage', chat_id=self.chat, text=part, parse_mode='HTML', disable_web_page_preview=True,
+                             **extra)['message_id']
+        except TooMany:
+            raise
+        except RuntimeError as e:
+            if 'parse entities' not in str(e):
+                raise
+        plain = html.unescape(re.sub(r'</?[bi]>', '', part))
+        return self.call('sendMessage', chat_id=self.chat, text=plain, disable_web_page_preview=True, **extra)['message_id']
 
 
 def chunks(text, limit=LIMIT):
@@ -241,13 +274,26 @@ def ranked(rep):
     return out
 
 
+def strong_all(rep):
+    """STRONG at every rank (TZ-40): every coin of the rule's order whose four signs agree with its side and whose |z| is at least
+    the rule's STRONG_Z - the frozen rule's condition without its TOP-3, so that its members among the TOP-3 are the report's
+    STRONG. In the rule's order."""
+    rows = rep['rows']
+    return [coin for coin in ranked(rep) if rows[coin].get('sum') == 4 * rows[coin]['signal'] and abs(rows[coin]['z']) >= adv3.STRONG_Z]
+
+
 def top_n(rep, n):
-    """The report with the cards of the rule's first n coins: the TOP-3's own cards, then adv3.card for the rest at the report's
-    deposit and risk, STRONG only within the TOP-3; each card its rank of n; the ratings recomputed over them."""
+    """The report with the cards of the rule's first n coins - the TOP-3's own cards, then adv3.card for the rest at the report's
+    deposit and risk, ★ STRONG wherever strong_all names the coin - each its rank k of n; then, marked extra, the card of every
+    coin strong_all names beyond the first n, its rank in the rule's order (TZ-40); the ratings recomputed over them all."""
     have = {cd['coin']: cd for cd in rep['cards']}
-    cards = [have.get(coin) or adv3.card(coin, rep['rows'][coin], False, rep['deposit'], rep['risk_pct'])
-             for coin in ranked(rep)[:n]]
-    out = dict(rep, cards=[dict(cd, rank=k, of=n) for k, cd in enumerate(cards, 1)], n=n)
+    order, strong = ranked(rep), set(strong_all(rep))
+
+    def card_of(coin):
+        return have.get(coin) or adv3.card(coin, rep['rows'][coin], coin in strong, rep['deposit'], rep['risk_pct'])
+    cards = [dict(card_of(coin), rank=k, of=n, extra=False) for k, coin in enumerate(order[:n], 1)]
+    cards += [dict(card_of(coin), rank=k, of=n, extra=True) for k, coin in enumerate(order, 1) if k > n and coin in strong]
+    out = dict(rep, cards=cards, n=n)
     out['trust'] = adv3.trust(out)
     return out
 
@@ -286,6 +332,12 @@ def liquidity(coin, now_ms):
     except Exception as e:
         log('liquidity failed:', coin, repr(e)[:200])
         return None
+
+
+def volumes(coins, now_ms):
+    """{coin: liquidity(coin, now_ms)} for coins, six requests at a time (TZ-40: an allocation reads every STRONG coin's)."""
+    with ThreadPoolExecutor(6) as pool:
+        return dict(zip(coins, pool.map(lambda coin: liquidity(coin, now_ms), coins)))
 
 
 def plan(rep, cs, budget, n, risk, liq):
@@ -354,22 +406,58 @@ def plan(rep, cs, budget, n, risk, liq):
             'cap_all': budget * adv3.RISK_ALL / 100}
 
 
+def plan_strong(rep, cs, budget, n, risk, liq):
+    """TZ-40's allocation: TZ-37's plan, unchanged, over every coin STRONG at any rank (strong_all) in the rule's order - the first n
+    that pass its limits placed, every other that passes them 'more', each sized by the same plan alone, as a trade of its own at
+    the average risk, and its mean same-way correlation with the placed trades read from the same plan over them and it; the
+    rejected with their reasons; 'plain' the rule's first n coins that are not STRONG. Each card carries its rank in the rule's
+    order, each 'more' item its number after the placed ones. The placed trades and the totals are plan's, the 'more' outside them."""
+    order, quals = ranked(rep), strong_all(rep)
+    rank = {coin: k for k, coin in enumerate(order, 1)}
+    over = f'сверх запрошенных {n}'
+    p = plan(dict(rep, top=quals, strong=quals), cs, budget, n, risk, liq)
+    placed = [it['card']['coin'] for it in p['items']]
+    more, rejected = [], [x for x in p['rejected'] if x[2] != over]
+    for coin in [c for c, _s, why in p['rejected'] if why == over]:
+        one = plan(dict(rep, top=[coin], strong=[coin]), cs, budget, 1, risk, liq)
+        rejected += one['rejected']
+        for it in one['items']:
+            crowd = None
+            if placed:
+                both = plan(dict(rep, top=placed + [coin], strong=placed + [coin]), cs, budget, len(placed) + 1, risk, liq)
+                crowd = next((x['crowd'] for x in both['items'] if x['card']['coin'] == coin), None)
+            more.append(dict(it, crowd=crowd))
+    for it in p['items'] + more:
+        it['card']['rank'] = rank[it['card']['coin']]
+    for number, it in enumerate(more, len(p['items']) + 1):
+        it['rank'] = number
+    return dict(p, more=more, rejected=rejected, plain=[c for c in order[:n] if c not in quals], strong_all=quals,
+                more_loss=sum(it['loss'] for it in more), more_loss_exact=sum(it['loss_exact'] for it in more))
+
+
 def strong_shares():
     """The reach shares a STRONG trade's targets carry: TZ-38's STRONG shares where Gate S stands, else the rule's (adv3.PIT)."""
     return adv3.PIT['strong' if adv3.FACTS['strong'].get('gate_S') == 'NOT DISQUALIFIED' else 'base']['mfe']
 
 
-def item_lines(it, k, number=None):
-    """One placed trade of an allocation: direction and quality, entry, stop, targets with their shares, capital, leverage, margin,
-    loss at the stop, invalidation, and its confidence with the note that the sizes are the Architect's formula, unproven."""
+def item_lines(it, k, number=None, more=False):
+    """One trade of an allocation: direction and quality, entry, stop, targets with their shares, capital, leverage, margin, loss
+    at the stop, invalidation, and its confidence with the note that the sizes are the Architect's formula, unproven. A trade
+    beyond the TOP-3 carries adv3.BEYOND_TAG; one of 'more' (TZ-40) is outside the allocation, a trade of its own, with its mean
+    same-way correlation with the placed trades where there are any."""
     usdt, pct, price = adv3.usdt, adv3.pct, adv3.price
     cd, mfe = it['card'], strong_shares()
     lo, hi = cd['zone']
     ref = cd['entry']
     conf = adv3.RELIABILITY if cd['mode'] != 'none' else 0
-    lines = [f"{f'{number}) ' if number else ''}{DOT[cd['side']]} <b>{cd['coin']} · {SIDE[cd['side']]}</b> · ★ STRONG",
-             f"Качество: z {adv3.signed(cd['z'])} · сумма знаков {adv3.signed(cd['sum'], 0)} из ±4 · доля {pct(100 * it['share'], 0)}%"
-             + (f" · корреляция с остальными {adv3.signed(it['crowd'])}" if k > 1 else ''),
+    if more:
+        share = 'вне распределения — одна сделка' + (f" · корреляция с основными {adv3.signed(it['crowd'])}"
+                                                     if it.get('crowd') is not None else '')
+    else:
+        share = f"доля {pct(100 * it['share'], 0)}%" + (f" · корреляция с остальными {adv3.signed(it['crowd'])}" if k > 1 else '')
+    lines = [f"{f'{number}) ' if number else ''}{DOT[cd['side']]} <b>{cd['coin']} · {SIDE[cd['side']]}</b> · ★ STRONG"
+             + (adv3.BEYOND_TAG if (cd.get('rank') or 0) > adv3.TOP_N else ''),
+             f"Качество: z {adv3.signed(cd['z'])} · сумма знаков {adv3.signed(cd['sum'], 0)} из ±4 · {share}",
              (f"Вход: <b>по рынку</b> ≈ {price(ref)}, зона {price(lo)}–{price(hi)}" if cd['mode'] == 'market'
               else f"Вход: <b>лимит {price(ref)}</b> — ждать отката, цена {price(cd['mark'])} ушла от зоны"),
              f"⛔ Стоп: <b>{price(cd['stop'])}</b> ({'−' if cd['side'] > 0 else '+'}{pct(cd['stop_pct'])}%)"]
@@ -384,12 +472,14 @@ def item_lines(it, k, number=None):
 
 
 def plan_parts(rep, p):
-    """The allocation view as one message: the budget and the limits in money, the result, each placed trade, the rejected and the
-    weaker named, and the note that the sizes are unproven. The six ratings are the assessment's, «оценка» (TZ-39)."""
+    """The allocation view as one message: the budget and the limits in money, the result, each placed trade, then - TZ-40 - every
+    other STRONG trade that passes the limits under «Дополнительные STRONG-кандидаты», each sized alone, with the loss of all of
+    them and the placed ones together against the 5 % limit; the rejected and the weaker named, and the note that the sizes are
+    unproven. The six ratings are the assessment's, «оценка» (TZ-39)."""
     last = dt.date.fromisoformat(rep['close_of'])
     usdt, pct, num = adv3.usdt, adv3.pct, adv3.num
     lines = ['💼 <b>ADV-3 · распределение капитала</b>', f"Закрытие дня {adv3.ddmm(rep['close_of'])} (UTC) · действует до 04:00 {last + 2 * adv3.DAY:%d.%m} по Батуми",
-             f"Бюджет {num(p['budget'], 6)} USDT · до {p['n']} {adv3.plural(p['n'], 'сделки', 'сделок', 'сделок')} · только STRONG, стоп не дальше {pct(STOP_MAX)}% входа",
+             f"Бюджет {num(p['budget'], 6)} USDT · до {p['n']} {adv3.plural(p['n'], 'сделки', 'сделок', 'сделок')} · STRONG на любом месте рейтинга, стоп не дальше {pct(STOP_MAX)}% входа",
              f"Риск на стопе: в среднем {pct(p['risk'])}% бюджета на сделку ({usdt(p['avg_trade'])} USDT), у сильнейшей не больше {pct(adv3.RISK_MAX, 0)}% "
              f"({usdt(p['cap_trade'])} USDT), на все не больше {pct(adv3.RISK_ALL, 0)}% ({usdt(p['cap_all'])} USDT)"]
     if not rep['marks_ok']:
@@ -403,14 +493,27 @@ def plan_parts(rep, p):
                   f"на её стопе / расстояние до стопа"]
     else:
         lines += ['Подходящих сделок нет — ничего не размещаю', f"Размещено 0 USDT · свободно {usdt(p['budget'])} USDT"]
+    more = p.get('more') or []
+    if more:
+        lines.append(f"Ещё {len(more)} STRONG {adv3.plural(len(more), 'проходит', 'проходят', 'проходят')} лимиты — ниже, в "
+                     f"«Дополнительные STRONG-кандидаты»")
     for it in p['items']:
         lines += [''] + item_lines(it, p['k'], it['rank'])
+    if more:
+        total, exact = p['loss'] + p['more_loss'], p['loss_exact'] + p['more_loss_exact']
+        lines += ['', f"<b>Дополнительные STRONG-кандидаты</b> — сверх запрошенных {p['n']}, в «Итог» не входят: каждая посчитана как "
+                      f"одна сделка с риском {pct(p['risk'])}% бюджета ({usdt(p['avg_trade'])} USDT)",
+                  f"Вместе с основными потеря на стопах — {usdt(total)} USDT = {pct(100 * total / p['budget'], 2)}% бюджета"
+                  + (f"; больше лимита {pct(adv3.RISK_ALL, 0)}%: брать вместо основных, а не вдобавок"
+                     if exact > p['budget'] * adv3.RISK_ALL / 100 + 1e-9 else '')]
+        for it in more:
+            lines += [''] + item_lines(it, p['k'], it['rank'], more=True)
     if p['rejected']:
         lines += ['', 'Отклонены: ' + '; '.join(f'{c} {s} — {why}' for c, s, why in p['rejected'])]
     if p['plain']:
-        lines.append('В ТОП-3 без STRONG — не берутся: ' + ', '.join(p['plain']))
-    if p['n'] > adv3.TOP_N:
-        lines.append(f'STRONG бывает только в ТОП-3: больше {adv3.TOP_N} сделок не будет')
+        lines.append(f"Без STRONG среди первых {p['n']} по силе — не берутся: " + ', '.join(p['plain']))
+    if any((it['card'].get('rank') or 0) > adv3.TOP_N for it in p['items'] + more):
+        lines += ['', adv3.BEYOND]
     lines += ['', 'Размеры — формула Архитектора (сила тренда, поправка на корреляцию, ликвидность, лимиты риска), не доказанная: '
                   'форвард-запись проверяет правило, а не этот отбор и не эти размеры.', FOOTER]
     return ['\n'.join(lines)]
@@ -480,7 +583,7 @@ def hhmm(t):
 
 # ---- the journal and the trades the cards offered -----------------------------------------------------------------
 
-CARD_KEYS = ('coin', 'side', 'strong', 'mode', 'entry', 'stop', 'targets', 'close', 'U', 'since', 'rank', 'of')
+CARD_KEYS = ('coin', 'side', 'strong', 'mode', 'entry', 'stop', 'targets', 'close', 'U', 'since', 'rank', 'of', 'extra')
 
 
 def journal_records():
@@ -529,13 +632,13 @@ def offers(records, out=None):
     """The trades the bot's cards offered (TZ-39): every card a journal record carries whose entry was offered - at market or
     as a limit - keyed by its coin, side and the close it was made from, the first record's kept; of an allocation record only
     the coins its plan placed (TZ-37's records carry the report's cards beside the plan). {key: offer}, in the records' order,
-    added to out where it is given."""
+    added to out where it is given. Since TZ-40 an allocation's offered trades are its placed ones and its 'more'."""
     out = {} if out is None else out
     for rec in records:
         close_of = rec.get('close_of')
         placed = None
         if rec.get('kind') == 'alloc' and isinstance(rec.get('alloc'), dict):
-            placed = {i.get('coin') for i in rec['alloc'].get('items') or [] if isinstance(i, dict)}
+            placed = {i.get('coin') for i in (rec['alloc'].get('items') or []) + (rec['alloc'].get('more') or []) if isinstance(i, dict)}
         for cd in rec.get('cards') or []:
             try:
                 if cd.get('mode') not in ('market', 'limit') or (placed is not None and cd['coin'] not in placed):
@@ -621,14 +724,14 @@ def forming_candles(coins, day):
 
 
 def candidates(p):
-    """The STRONG coins an allocation places, as (coin, side): those that pass its limits."""
-    return [(it['card']['coin'], it['card']['side']) for it in p['items']]
+    """The STRONG coins that pass an allocation's limits, as (coin, side): the placed ones, then - TZ-40 - its 'more'."""
+    return [(it['card']['coin'], it['card']['side']) for it in p['items'] + (p.get('more') or [])]
 
 
 def alerts_of(fol, passing, prev_passing, done, rep, p):
     """The check's alerts, each with the price it fired at against the close it rests on: a followed trade stopped - by a closed
-    candle or the forming one - or ended by its signal at a close, each once; and every STRONG candidate the allocation places
-    now that it did not place at the check before."""
+    candle or the forming one - or ended by its signal at a close, each once; and every STRONG candidate that passes the
+    allocation's limits now - placed or, since TZ-40, among its 'more' - that did not at the check before."""
     out = []
     for f in fol:
         kind = {'stop': 'stop', 'touch': 'stop', 'signal': 'signal'}.get(f['state'])
@@ -636,7 +739,7 @@ def alerts_of(fol, passing, prev_passing, done, rep, p):
             out.append({'kind': kind, 'coin': f['coin'], 'side': f['side'], 'close_of': f['close_of'], 'close': f['close'],
                         'level': f['stop'] if kind == 'stop' else f['price'], 'price': f['price'], 'day': f['day'],
                         'touch': f['state'] == 'touch', 'mark': (rep['rows'].get(f['coin']) or {}).get('mark')})
-    placed = {(it['card']['coin'], it['card']['side']): it['card'] for it in p['items']}
+    placed = {(it['card']['coin'], it['card']['side']): it['card'] for it in p['items'] + (p.get('more') or [])}
     for coin, side in passing:
         if (coin, side) not in prev_passing:
             cd = placed[coin, side]
@@ -706,36 +809,44 @@ def event_lines(al, p, fact=False):
         lines.append(f"🚪 {coin} {SIDE[side]}, {'карточка' if len(group) == 1 else 'карточки'} {cards}: сигнал закончился на "
                      f"закрытии {ddmm(day)} — по правилу выход по закрытию {price(group[0]['level'])}"
                      + (f"; сейчас {price(mark)}" if mark else ''))
-    placed = {(it['card']['coin'], it['card']['side']): it for it in p['items']}
+    placed = {(it['card']['coin'], it['card']['side']): (it, False) for it in p['items']}
+    placed.update({(it['card']['coin'], it['card']['side']): (it, True) for it in p.get('more') or []})
     for a in al:
         if a['kind'] == 'candidate':
             if fact:
+                it, more = placed[a['coin'], a['side']]
                 lines += [f"🆕 STRONG {a['coin']} {SIDE[a['side']]} теперь проходит лимиты распределения ({adv3.num(p['budget'], 6)} "
-                          f"USDT, риск {adv3.pct(p['risk'])}%):"] + item_lines(placed[a['coin'], a['side']], p['k'])
+                          f"USDT, риск {adv3.pct(p['risk'])}%" + (f"; сверх {p['n']} — как одна сделка" if more else '') + '):'] \
+                    + item_lines(it, p['k'], more=more)
             else:
                 lines.append(f"🆕 STRONG: {a['coin']} {SIDE[a['side']]} проходит лимиты распределения — план ниже")
     return lines
 
 
 def candidate_lines(rep, p, new):
-    """The close's STRONG candidates at the default budget: each placed one with its capital, leverage, margin and loss at the
-    stop, each other named with its reason; 🆕 marks a candidate the check before did not place."""
-    strong = [c for c in rep['top'] if c in rep['strong']]
+    """The close's STRONG candidates at the default budget - since TZ-40 every coin STRONG at any rank, in the rule's order, each
+    beyond the TOP-3 marked: each placed one with its capital, leverage, margin and loss at the stop, each of 'more' the same as a
+    trade of its own, each other named with its reason; 🆕 marks a candidate that did not pass the limits at the check before."""
+    strong = strong_all(rep)
     if not strong:
         return ['<b>STRONG-кандидатов нет</b>']
     usdt = adv3.usdt
-    lines = [f"<b>STRONG-кандидаты</b> — распределение {adv3.num(p['budget'], 6)} USDT, риск {adv3.pct(p['risk'])}%, стоп не "
-             f"дальше {adv3.pct(STOP_MAX, 0)}%"]
+    lines = [f"<b>STRONG-кандидаты</b> — на любом месте рейтинга; распределение {adv3.num(p['budget'], 6)} USDT, риск "
+             f"{adv3.pct(p['risk'])}%, стоп не дальше {adv3.pct(STOP_MAX, 0)}%"]
     placed = {it['card']['coin']: it for it in p['items']}
+    more = {it['card']['coin']: it for it in p.get('more') or []}
     why = {c: r for c, _s, r in p['rejected']}
+    rank = {coin: k for k, coin in enumerate(ranked(rep), 1)}
     for coin in strong:
         side = rep['rows'][coin]['signal']
-        if coin in placed:
-            it = placed[coin]
-            lines.append(f"{'🆕 ' if (coin, side) in new else ''}{coin} {SIDE[side]} — проходит: капитал {usdt(it['notional'])} USDT · "
-                         f"плечо {it['leverage']}× изол. · маржа {usdt(it['margin'])} USDT · потеря на стопе {usdt(it['loss'])} USDT")
+        head = f"{'🆕 ' if (coin, side) in new else ''}{coin} {SIDE[side]}{adv3.BEYOND_TAG if rank[coin] > adv3.TOP_N else ''}"
+        it = placed.get(coin) or more.get(coin)
+        if it:
+            beyond = f", сверх {p['n']} (одна сделка)" if coin in more else ''
+            lines.append(f"{head} — проходит{beyond}: капитал {usdt(it['notional'])} USDT · плечо {it['leverage']}× изол. · маржа "
+                         f"{usdt(it['margin'])} USDT · потеря на стопе {usdt(it['loss'])} USDT")
         else:
-            lines.append(f"{coin} {SIDE[side]} — не проходит: {why.get(coin, 'вне распределения')}")
+            lines.append(f"{head} — не проходит: {why.get(coin, 'вне распределения')}")
     return lines
 
 
@@ -796,12 +907,14 @@ def compose(slot, rep, fol, al, p, zones, prev, now, weak=()):
     """(text, quiet, one line, cards offered) of a check. It notifies only for an alert. The signal check is the close's
     message - events, changes, cards, STRONG candidates, the trades the cards offered and those weakened - or one line where it
     finds nothing: no alert, no weakening, no change of signal among the coins, the TOP-3 with its sides and STRONG as at the
-    check before. The fact check is its events and the zones left, or one line where it finds neither."""
+    check before, and - TZ-40 - the coins STRONG at any rank as at the check before, which a record of TZ-39's does not hold. The
+    fact check is its events and the zones left, or one line where it finds neither."""
     loud = bool(al)
     new = {(a['coin'], a['side']) for a in al if a['kind'] == 'candidate'}
     if slot[1] == 'signal':
         same = (prev is not None and prev.get('top') == rep['top'] and prev.get('strong') == rep['strong']
-                and all((prev.get('signals') or {}).get(c) == rep['rows'][c].get('signal') for c in rep['top']))
+                and all((prev.get('signals') or {}).get(c) == rep['rows'][c].get('signal') for c in rep['top'])
+                and isinstance(prev.get('strong_all'), list) and sorted(prev['strong_all']) == sorted(strong_all(rep)))
         if not loud and not weak and same and not any(adv3.changes(rep)):
             return quiet_line(slot, rep, fol, now), True, True, []
         tail = candidate_lines(rep, p, new) + [''] + followed_lines(fol) + weak_lines(weak)
@@ -816,15 +929,26 @@ def compose(slot, rep, fol, al, p, zones, prev, now, weak=()):
             lines += [''] + block
     n = sum(f['state'] == 'open' for f in fol)
     lines += ['', f"Сделок по карточкам открыто: {n} · следующая проверка {hhmm(next_at(now))} по Батуми", FOOTER]
-    offered = [it['card'] for it in p['items'] if (it['card']['coin'], it['card']['side']) in new]
+    offered = [it['card'] for it in p['items'] + (p.get('more') or []) if (it['card']['coin'], it['card']['side']) in new]
     return '\n'.join(lines), not loud, False, offered
+
+
+def alloc_fields(p):
+    """An allocation's part of a record: its budget, N, risk, totals, placed trades, since TZ-40 its 'more' in the same shape, and
+    the rejected - the fields TZ-37's and TZ-39's records hold."""
+    def trade(it):
+        return {'coin': it['card']['coin'], 'side': it['card']['side'], 'notional': it['notional'], 'leverage': it['leverage'],
+                'margin': it['margin'], 'loss': it['loss']}
+    return {'budget': p['budget'], 'n': p['n'], 'risk': p['risk'], 'allocated': p['allocated'], 'free': p['free'], 'loss': p['loss'],
+            'items': [trade(it) for it in p['items']], 'more': [trade(it) for it in p.get('more') or []], 'rejected': p['rejected']}
 
 
 def check_record(slot, rep, fol, al, p, zones, ids, quiet, one_line, offered, at, weak=()):
     """The check's journal record (CANON PART VII's internal log; it measures and tunes nothing): every coin's signal, sum of
     signs, strength, rank, unit, close and mark; the trades the cards offered that this check read, with their state; the
-    alerts with the price each fired at against the close it rests on; the trades weakened; the STRONG coins the allocation
-    placed at the default budget; the zones left; the six ratings; and the cards the message offered."""
+    alerts with the price each fired at against the close it rests on; the trades weakened; the STRONG coins that pass the
+    allocation's limits at the default budget, placed and - TZ-40 - 'more'; the coins STRONG at any rank; the zones left; the six
+    ratings; and the cards the message offered."""
     rank = {coin: k for k, coin in enumerate(ranked(rep), 1)}
     rec = base_record('check', rep, ids, offered, at)
     rec.update(slot=slot_text(slot), quiet=quiet, one_line=one_line,
@@ -833,19 +957,15 @@ def check_record(slot, rep, fol, al, p, zones, ids, quiet, one_line, offered, at
                followed=[{k: f.get(k) for k in ('coin', 'side', 'close_of', 'close', 'U', 'stop', 'state', 'day', 'price', 'R')}
                          for f in fol if f['state'] != 'closed'],
                alerts=al, weakened=[[c, s] for c, s in weak], passing=[[c, s] for c, s in candidates(p)], zones_left=zones,
-               trust=rep['trust'],
-               alloc={'budget': p['budget'], 'n': p['n'], 'risk': p['risk'], 'allocated': p['allocated'], 'free': p['free'],
-                      'loss': p['loss'], 'items': [{'coin': it['card']['coin'], 'side': it['card']['side'], 'notional': it['notional'],
-                                                    'leverage': it['leverage'], 'margin': it['margin'], 'loss': it['loss']} for it in p['items']],
-                      'rejected': p['rejected']})
+               strong_all=strong_all(rep), trust=rep['trust'], alloc=alloc_fields(p))
     return rec
 
 
 def check(tg, data, slot, now):
     """One scheduled check (TZ-39): the report at the default deposit and risk, the trades the cards offered held by the rule, the
-    candle forming since the close at the fact check, the allocation at the default budget, the alerts, the weakened trades at
-    the signal check, the message - sent quiet unless it holds an alert - and its record, returned for the journal once the
-    message is sent."""
+    candle forming since the close at the fact check, the allocation at the default budget over STRONG at every rank (TZ-40), the
+    alerts, the weakened trades at the signal check, the message - sent quiet unless it holds an alert - and its record, returned
+    for the journal once the message is sent."""
     rep = top_n(live_report(data, adv3.DEPOSIT, adv3.RISK), adv3.TOP_N)
     last = dt.date.fromisoformat(rep['close_of'])
     offs, done, prev = journal_scan()
@@ -854,7 +974,7 @@ def check(tg, data, slot, now):
         held = sorted({k[0] for k in offs if (*k, 'stop') not in done and (*k, 'signal') not in done})
         forming = forming_candles(held, last + adv3.DAY)
     fol = follow(offs, data.cs, data.funds, last, forming, done)
-    p = plan(rep, data.cs, adv3.DEPOSIT, adv3.TOP_N, adv3.RISK, {c: liquidity(c, rep['made_at_ms']) for c in rep['strong']})
+    p = plan_strong(rep, data.cs, adv3.DEPOSIT, adv3.TOP_N, adv3.RISK, volumes(strong_all(rep), rep['made_at_ms']))
     prev_passing = {(c, s) for c, s in (prev or {}).get('passing') or []}
     al = alerts_of(fol, candidates(p), prev_passing, done, rep, p)
     zones = zones_left(rep, offs, fol) if slot[1] == 'fact' else []
@@ -932,13 +1052,10 @@ def handle(tg, data, text):
                 rec['trust'] = rep['trust']
             elif kind == 'alloc':
                 rep = top_n(live_report(data, budget, risk), adv3.TOP_N)
-                p = plan(rep, data.cs, budget, n, risk, {c: liquidity(c, rep['made_at_ms']) for c in rep['strong']})
+                p = plan_strong(rep, data.cs, budget, n, risk, volumes(strong_all(rep), rep['made_at_ms']))
                 ids = [i for part in plan_parts(rep, p) for i in tg.send(part)]
-                rec = base_record('alloc', rep, ids, [it['card'] for it in p['items']])
-                rec['alloc'] = {'budget': budget, 'n': n, 'risk': risk, 'allocated': p['allocated'], 'free': p['free'], 'loss': p['loss'],
-                                'items': [{'coin': it['card']['coin'], 'side': it['card']['side'], 'notional': it['notional'],
-                                           'leverage': it['leverage'], 'margin': it['margin'], 'loss': it['loss']} for it in p['items']],
-                                'rejected': p['rejected']}
+                rec = base_record('alloc', rep, ids, [it['card'] for it in p['items'] + p['more']])
+                rec['alloc'] = alloc_fields(p)
             else:
                 rep, msg = make(data, adv3.DEPOSIT, risk, n)
                 rec = base_record('request', rep, tg.send(msg))
@@ -1057,9 +1174,11 @@ def selftest():
                        ('привет', None), ('сигнализация', None), ('', None), ('12345', None), ('все', None), ('eth', None),
                        ('оценочный', None)):
         chk(f'route {text!r}', route(text) == want)
-    chk('HELP names the commands, the list to 7, the 14 % filter, the checks at 04:10 and 16:10 and the quiet rule, in one part',
-        all(k in HELP for k in ('«сигнал»', '«сигнал топ 7»', '«сигнал 10000 топ 3»', '«оценка»', '14%', 'STRONG', 'не больше 1%',
-                                '04:10', '16:10', 'одной строкой')) and len(chunks(HELP)) == 1)
+    chk('HELP names the commands, the list to 7, STRONG at every rank and its extra section, the 14 % filter, the checks at 04:10 and '
+        '16:10 and the quiet rule, in one part', all(k in HELP for k in (
+            '«сигнал»', '«сигнал топ 7»', '«сигнал 10000 топ 3»', '«оценка»', '14%', 'на любом месте рейтинга', '«Дополнительные STRONG-кандидаты»',
+            'каждая посчитана как одна сделка', 'вне ТОП-3 — не измеряемая стратегия', 'не больше 1%', '04:10', '16:10', 'одной строкой'))
+        and len(chunks(HELP)) == 1)
     long_text = '\n'.join(f'line {i} ' + 'x' * 90 for i in range(200))
     parts = chunks(long_text)
     chk('chunks: 5 parts under the limit, joined back whole',
@@ -1076,13 +1195,19 @@ def selftest():
             os.remove(os.path.join(tmp, name))
         os.rmdir(tmp)
 
+    slept, real_sleep = [], time.sleep
+    time.sleep = slept.append       # the self-test never waits: each pause is recorded instead, and time.sleep restored at its end
+
     class Fake(Telegram):
-        def __init__(self):
+        def __init__(self, busy=0, wait=7):
             super().__init__('123456:SECRET', 777)
-            self.calls = []
+            self.calls, self.busy, self.wait = [], busy, wait
 
         def call(self, method, http_timeout=30, **params):
             self.calls.append(params)
+            if self.busy:
+                self.busy -= 1
+                raise TooMany(f'telegram sendMessage: 429 Too Many Requests: retry after {self.wait}', self.wait)
             if params.get('parse_mode') == 'HTML' and '<b>bad' in params.get('text', ''):
                 raise RuntimeError("telegram sendMessage: 400 Bad Request: can't parse entities")
             return {'message_id': len(self.calls)}
@@ -1097,6 +1222,47 @@ def selftest():
     fk.send('<b>bad quiet</b>', quiet=True)
     chk('quiet: every part, the plain fallback among them, without a notification',
         len(fk.calls) == n0 + 4 and all(c.get('disable_notification') is True for c in fk.calls[n0:]))
+    del slept[:]
+    fk.send('\n'.join(['q' * 3000, 'r' * 3000, 's' * 3000]))
+    chk('pace: the parts of one message 1.1 s apart, none before the first (TZ-40)', slept == [1.1, 1.1] and PACE == 1.1)
+    busy = Fake(busy=2)
+    del slept[:]
+    ids = busy.send('<b>one</b>', quiet=True)
+    chk('429: a part refused as too many requests waits the retry_after named and a second more, and goes again, quiet still',
+        ids == [3] and slept == [8, 8] and len(busy.calls) == 3 and all(c['text'] == '<b>one</b>' and c.get('disable_notification') is True
+                                                                     for c in busy.calls))
+    stuck, raised = Fake(busy=3), False
+    try:
+        stuck.send('x\n' + 'y' * 4000)
+    except TooMany:
+        raised = True
+    chk('429: a part refused three times raises, and no later part is sent', raised and len(stuck.calls) == 3
+        and all(c['text'] == 'x' for c in stuck.calls))
+    del slept[:]
+    Fake(busy=1, wait=600).send('z')
+    chk('429: a retry_after above 60 s waits 61 s', slept == [61])
+    real_open = urllib.request.urlopen
+
+    def refuse(body):
+        def opener(req, timeout=None):
+            raise urllib.error.HTTPError(req.full_url, 429, 'x', {}, io.BytesIO(json.dumps(body).encode()))
+        return opener
+    got = []
+    try:
+        for body in ({'ok': False, 'error_code': 429, 'description': 'Too Many Requests: retry after 9', 'parameters': {'retry_after': 9}},
+                     {'ok': False, 'error_code': 429, 'description': 'Too Many Requests'},
+                     {'ok': False, 'error_code': 400, 'description': 'Bad Request'}):
+            urllib.request.urlopen = refuse(body)
+            try:
+                Telegram('123456:SECRET', 777).call('sendMessage', text='x')
+            except TooMany as e:
+                got.append(('429', e.retry_after))
+            except RuntimeError as e:
+                got.append(('other', str(e)))
+    finally:
+        urllib.request.urlopen = real_open
+    chk('call: a 429 raises TooMany with the retry_after named, 5 s where none is; another refusal a RuntimeError of its own',
+        got == [('429', 9), ('429', 5), ('other', 'telegram sendMessage: 400 Bad Request')])
     SECRETS.append('123456:SECRET')
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
@@ -1215,6 +1381,11 @@ def selftest():
         and offs[('BTC', 1, '2026-10-29')]['stop'] == 92.0 and offs[('BTC', 1, '2026-10-29')]['mode'] == 'market')
     chk('alerted: the alerts of check records alone, a broken one left out',
         alerted(recs) == {('XRP', 1, '2026-10-30', 'stop'), ('BTC', 1, '2026-10-30', 'candidate')})
+    more_rec = {'kind': 'alloc', 'close_of': '2026-10-31', 'alloc': {'items': [{'coin': 'XRP'}], 'more': [{'coin': 'ADA'}]}, 'cards': [
+        {'coin': 'XRP', 'side': 1, 'mode': 'market', 'close': 2.0, 'U': 0.2}, {'coin': 'ADA', 'side': 1, 'mode': 'market', 'close': 0.5, 'U': 0.05},
+        {'coin': 'SOL', 'side': 1, 'mode': 'market', 'close': 9.0, 'U': 0.5}]}
+    chk('offers: an allocation offers its placed trades and, since TZ-40, its more - nothing else of its cards',
+        list(offers([more_rec])) == [('XRP', 1, '2026-10-31'), ('ADA', 1, '2026-10-31')])
 
     # ---- a synthetic market: twelve coins, trends of several strengths -----------------------------------------------
     dm = dt.date(2026, 6, 1)
@@ -1235,17 +1406,46 @@ def selftest():
     by_hand = sorted(active, key=lambda c: (-abs(rep0['rows'][c]['z']), adv3.COINS.index(c)))
     chk('ranked: every active coin by |z|, ties in the coins\' order, its first three the report\'s TOP-3',
         order == by_hand and order[:3] == rep0['top'] and len(order) == 12)
+    rows0 = rep0['rows']
+    strong_hand = [c for c in order if rows0[c]['sum'] == 4 * rows0[c]['signal'] and abs(rows0[c]['z']) >= 1.0]
+    chk('strong_all: every coin whose four signs agree with its side and whose |z| is at least 1, at every rank, in the rule\'s order - '
+        'here all twelve; its members among the TOP-3 are the report\'s STRONG (TZ-40)',
+        strong_all(rep0) == strong_hand == order and [c for c in strong_all(rep0) if c in rep0['top']] == rep0['strong'])
+    c5, c9 = order[4], order[8]
+    rows_mix = dict(rows0, **{c5: dict(rows0[c5], sum=2 * rows0[c5]['signal']), c9: dict(rows0[c9], z=0.9 * rows0[c9]['signal'])})
+    mix = dict(rep0, rows=rows_mix)
+    want_mix = [c for c in order if c not in (c5, c9)]
+    m_mix = top_n(mix, 3)
+    chk('strong_all and top_n on a mixed market: a coin whose signs do not all agree and one whose |z| is below 1 - which moves to '
+        'the end of the order - are neither STRONG nor extra; the STRONG beyond the first three are extra, in order',
+        strong_all(mix) == want_mix and ranked(mix)[-1] == c9 and [cd['coin'] for cd in m_mix['cards'] if not cd['extra']] == order[:3]
+        and [cd['coin'] for cd in m_mix['cards'] if cd['extra']] == want_mix[3:]
+        and not any(cd['coin'] in (c5, c9) for cd in m_mix['cards']))
     r7 = top_n(rep0, 7)
-    chk('top_n: seven cards ranked 1 to 7 of 7, the TOP-3\'s own cards first, STRONG only among them, the ratings over all seven',
-        [cd['coin'] for cd in r7['cards']] == order[:7] and [(cd['rank'], cd['of']) for cd in r7['cards']] == [(k, 7) for k in range(1, 8)]
-        and all(dict(cd, rank=None, of=None) == dict(c0, rank=None, of=None) for cd, c0 in zip(r7['cards'], rep0['cards']))
-        and not any(cd['strong'] for cd in r7['cards'][3:]) and len(r7['trust']['cards']) == 7 and r7['n'] == 7)
+    main7, extra7 = r7['cards'][:7], r7['cards'][7:]
+    chk('top_n: seven cards ranked 1 to 7 of 7, the TOP-3\'s own cards first, ★ STRONG wherever four signs agree and |z| >= 1, then '
+        'the five STRONG beyond seven marked extra, ranks 8 to 12; the ratings over all twelve; applied twice, the same (TZ-40)',
+        [cd['coin'] for cd in main7] == order[:7] and [(cd['rank'], cd['of'], cd['extra']) for cd in main7] == [(k, 7, False) for k in range(1, 8)]
+        and all(dict(cd, rank=None, of=None, extra=None) == dict(c0, rank=None, of=None, extra=None) for cd, c0 in zip(main7, rep0['cards']))
+        and [cd['coin'] for cd in extra7] == order[7:] and [(cd['rank'], cd['of'], cd['extra']) for cd in extra7] == [(k, 7, True) for k in range(8, 13)]
+        and all(cd['strong'] for cd in r7['cards']) and len(r7['trust']['cards']) == 12 and r7['n'] == 7
+        and top_n(top_n(rep0, 3), 7)['cards'] == r7['cards'])
     r1 = top_n(rep0, 1)
     m7, m1 = adv3.message(r7, adv3.FACTS), adv3.message(r1, adv3.FACTS)
-    chk('the TOP-7 message: seven cards, each its confidence, the label ТОП-7, the other signals without the seven; TOP-1 one card',
-        m7.count('Основание: сумма знаков') == 7 and m7.count('Уверенность: <b>1/5</b>') == 7 and 'ТОП-7 по силе тренда' in m7
-        and m7.count('ранг 7 из 7') == 1 and m1.count('Основание: сумма знаков') == 1 and len(r1['cards']) == 1
-        and not any(f'{c},' in m7.split('Остальные сигналы')[1] or m7.split('Остальные сигналы')[1].rstrip().endswith(c) for c in order[:7]))
+    others7 = m7.split('Остальные сигналы')[1]
+    chk('the TOP-7 message: seven cards under ТОП-7, then five under «Дополнительные STRONG-кандидаты», each with its confidence; '
+        'ranks 4 to 12 marked beyond the TOP-3, the extra by their rank beyond the list; the footnote once; no coin left among the other signals',
+        m7.count('Основание: сумма знаков') == 12 and m7.count('Уверенность: <b>1/5</b>') == 12
+        and m7.index('ТОП-7 по силе тренда') < m7.index('<b>Дополнительные STRONG-кандидаты</b> — за ТОП-7') < m7.index('Остальные сигналы')
+        and m7.count('ранг 7 из 7') == 1 and m7.count('ранг 8 — за ТОП-7') == 1 and m7.count('ранг 12 — за ТОП-7') == 1
+        and m7.count('· ★ STRONG · вне ТОП-3') == 9 and m7.count(adv3.BEYOND) == 1 and '🟢 ЛОНГ:' not in others7 and '🔴 ШОРТ:' not in others7)
+    chk('TOP-1: one card ranked 1 of 1 and the eleven STRONG beyond it, extra', len(r1['cards']) == 12 and m1.count('ранг 1 из 1') == 1
+        and len(re.findall(r'ранг \d+ — за ТОП-1', m1)) == 11 and 'ТОП-1 по силе тренда' in m1)
+    flat = dict(rep0, rows={c: (dict(r, sum=2 * r['signal']) if c in order[3:] else r) for c, r in rows0.items()})
+    m3 = adv3.message(top_n(flat, 3), adv3.FACTS)
+    chk('no STRONG beyond the TOP-3: no extra section, no tag, no footnote, the others among the other signals',
+        'Дополнительные STRONG' not in m3 and 'вне ТОП-3' not in m3 and m3.count('Основание: сумма знаков') == 3
+        and all(c in m3.split('Остальные сигналы')[1] for c in order[3:]))
 
     # ---- the allocation: golden cases by hand, the selection with the 14 % limit, the limits at random ------------------
     D2 = adv3.DEPOSIT
@@ -1331,24 +1531,107 @@ def selftest():
             bad.append(trial)
     chk('limits over 400 random scenarios: STRONG only and within n, stops within 14 %, each loss at the stop within 1 % of the budget, '
         'all within 5 %, positions whole and within the budget, margin covers the leverage', not bad)
-    fr, stage = scenario([('ETH', 1, 3.0, 8.0, True), ('XRP', 1, 2.0, 10.0, True), ('SOL', -1, 2.5, 15.0, True), ('BTC', 1, 1.5, 6.0, False)],
-                         rets={'ETH': A, 'XRP': Cs, 'SOL': Bs, 'BTC': Ds})
-    pf = plan(fr, stage, 10000.0, 3, 0.5, {})
-    view = plan_parts(fr, pf)
+
+    # ---- TZ-40: STRONG at every rank - plan_strong over TZ-37's plan, golden cases by hand and the limits at random --------------
+    def scen2(spec, marks_ok=True):
+        """A report of spec's coins alone - (coin, side, |z|, stop %, |sum of signs|) each - every other coin without a signal; its
+        TOP-3 and STRONG by the frozen rule's own ranking, its closes and marks 100."""
+        rows = {c: {'signal': None} for c in adv3.COINS}
+        for coin, side, z, stop, ssum in spec:
+            rows[coin] = {'signal': side, 'z': z * side, 'sum': ssum * side, 'U': stop, 'close': 100.0, 'prev': side, 'since': str(last),
+                          'stop': 100.0 - side * stop, 'mark': 100.0, 'funding': 0.0001, 'funding_h': 8}
+        top, strong = adv3.ranking([(c, (r['signal'], r.get('z'), r.get('sum'), r.get('U'), r.get('close'))) for c, r in rows.items()
+                                    if r['signal'] is not None])
+        return dict(base, rows=rows, top=top, strong=strong, marks_ok=marks_ok, cards=[])
+
+    ga = [('ETH', 1, 3.0, 8.0, 4), ('SOL', 1, 2.5, 8.0, 2), ('XRP', -1, 2.2, 15.0, 4), ('ADA', 1, 2.0, 8.0, 4), ('BNB', 1, 1.5, 10.0, 4),
+          ('LTC', 1, 0.8, 8.0, 4)]
+    ra = scen2(ga)
+    csa = {'ETH': series(A), 'SOL': series(Cs), 'XRP': series(Cs), 'ADA': series(Bs), 'BNB': series(A), 'LTC': series(Ds)}
+    pa = plan_strong(ra, csa, 10000.0, 2, 0.5, {})
+    ia, ma = pa['items'], pa['more']
+    chk('plan_strong golden: n 2 places the first two STRONG that pass - ETH at rank 1 and ADA at rank 4 - XRP rejected for its 15 % '
+        'stop, BNB at rank 5 beyond n in more; SOL without four agreeing signs and LTC with |z| 0.8 not STRONG; SOL the weaker named',
+        ra['top'] == ['ETH', 'SOL', 'XRP'] and ra['strong'] == ['ETH', 'XRP'] and strong_all(ra) == ['ETH', 'XRP', 'ADA', 'BNB']
+        and [x['card']['coin'] for x in ia] == ['ETH', 'ADA'] and [x['card']['coin'] for x in ma] == ['BNB']
+        and pa['rejected'] == [('XRP', 'SHORT', 'стоп 15,0% дальше 14,0%')] and pa['plain'] == ['SOL']
+        and [x['card']['rank'] for x in ia + ma] == [1, 4, 5] and [x['rank'] for x in ia + ma] == [1, 2, 3])
+    chk('plan_strong golden: the placed pair by TZ-37\'s arithmetic - strengths 3 and 2 uncorrelated, shares 0.6 and 0.4, 731 and 487 USDT, '
+        'leverage 7, margin 105 and 70, loss 60 and 40 - and BNB alone at the average risk: 490 USDT, leverage 6, margin 82, loss 50, its '
+        'correlation with the placed ones 0.5 (one series with ETH\'s, none with ADA\'s)',
+        [(x['notional'], x['leverage'], x['margin'], x['loss']) for x in ia] == [(731, 7, 105, 60), (487, 7, 70, 40)]
+        and [round(x['share'], 6) for x in ia] == [0.6, 0.4] and (ma[0]['notional'], ma[0]['leverage'], ma[0]['margin'], ma[0]['loss']) == (490, 6, 82, 50)
+        and abs(ma[0]['crowd'] - 0.5) < 1e-9 and pa['allocated'] == 1218 and pa['free'] == 8782 and pa['loss'] == 100 and pa['more_loss'] == 50)
+    pb = plan_strong(ra, csa, 10000.0, 7, 0.5, {})
+    chk('plan_strong: seven requested, three pass - all three placed, nothing more; one requested - one placed, two more',
+        [x['card']['coin'] for x in pb['items']] == ['ETH', 'ADA', 'BNB'] and pb['more'] == [] and pb['plain'] == ['SOL', 'LTC']
+        and [x['card']['coin'] for x in plan_strong(ra, csa, 10000.0, 1, 0.5, {})['more']] == ['ADA', 'BNB'])
+    gw = [(c, 1, 3.0 - 0.1 * k, 8.0, 4) for k, c in enumerate(('ETH', 'SOL', 'XRP', 'ADA', 'BNB', 'LTC'))]
+    rw = scen2(gw)
+    csw = {c: series([r * (1 + 0.1 * k) if j % (k + 2) == 0 else 0.0 for j, r in enumerate(A)]) for k, (c, *_x) in enumerate(gw)}
+    pw = plan_strong(rw, csw, 10000.0, 1, 1.0, {})
+    chk('plan_strong at 1 % and n 1: one placed at 1 %, five more at 1 % each - 1,219 USDT each at an 8 % stop, losses 100 - together '
+        'beyond 5 % of the budget', len(pw['items']) == 1 and len(pw['more']) == 5 and all(x['notional'] == 1219 and x['loss'] == 100 for x in pw['items'] + pw['more'])
+        and pw['loss_exact'] + pw['more_loss_exact'] > 500)
+    rnd2, bad2 = random.Random(40), []
+    for trial in range(400):
+        coins_ = rnd2.sample(adv3.COINS, rnd2.randint(1, 9))
+        spec = [(c, rnd2.choice((1, -1)), rnd2.uniform(0.5, 6.0), rnd2.uniform(0.3, 18.0), rnd2.choice((4, 4, 4, 3, 2))) for c in coins_]
+        r = scen2(spec)
+        cs2 = {c: series([rnd2.gauss(0, 0.03) if rnd2.random() < 0.8 else x for x in A]) for c in coins_}
+        budget, risk, n = rnd2.choice((100.0, 777.0, 10000.0, 250000.0, 3e6)), rnd2.choice((0.05, 0.3, 0.5, 1.0)), rnd2.randint(1, 7)
+        liq = {c: rnd2.choice((None, 5e4, 1e6, 1e9)) for c in coins_}
+        pp = plan_strong(r, cs2, budget, n, risk, liq)
+        order_ = ranked(r)
+        rows_ = r['rows']
+        quals = [c for c in order_ if rows_[c]['sum'] == 4 * rows_[c]['signal'] and abs(rows_[c]['z']) >= 1.0]
+        passing = [c for c in quals if rows_[c]['U'] <= 14.0]
+        main_, more_ = [x['card']['coin'] for x in pp['items']], [x['card']['coin'] for x in pp['more']]
+        named = [x[0] for x in pp['rejected']]
+        trades = pp['items'] + pp['more']
+        ok = (set(main_) <= set(passing[:n]) and set(more_) <= set(passing[n:]) and main_ + more_ == [c for c in passing if c in main_ + more_]
+              and sorted(main_ + more_ + named) == sorted(quals) and pp['plain'] == [c for c in order_[:n] if c not in quals]
+              and all(x['card']['rank'] == order_.index(x['card']['coin']) + 1 for x in trades)
+              and all(float(x['notional']).is_integer() and 5 <= x['notional'] <= budget for x in trades)
+              and all(x['loss_exact'] <= budget * RM / 100 + 1e-9 for x in pp['items']) and pp['loss_exact'] <= budget * adv3.RISK_ALL / 100 + 1e-9
+              and all(x['loss_exact'] <= budget * risk / 100 + 1e-9 and x['share'] == 1 for x in pp['more'])
+              and pp['allocated'] == sum(x['notional'] for x in pp['items']) <= budget and pp['free'] == budget - pp['allocated']
+              and all(x['margin'] * x['leverage'] >= x['notional'] and 1 <= x['leverage'] <= 20 and x['card']['stop_pct'] <= 14.0 for x in trades)
+              and all((not liq.get(x['card']['coin'])) or x['notional'] <= LIQ_FRAC * liq[x['card']['coin']] + 1 for x in trades))
+        text_ = plan_parts(r, pp)[0]
+        ok = ok and all(text_.count('<%s>' % t) == text_.count('</%s>' % t) for t in ('b', 'i')) and text_.count('Капитал:') == len(trades)
+        if not ok:
+            bad2.append(trial)
+    chk('plan_strong over 400 random scenarios: the placed among the first n that pass, the more among the rest, both in rank order, '
+        'every STRONG coin placed, more or named; each more a trade of its own at the average risk; the placed within 1 % and 5 %, whole '
+        'positions, the leverage and margin, the liquidity cap; the view balanced, one Капитал a trade', not bad2)
+    view = plan_parts(ra, pa)
     first = view[0]
     chk('plan_parts: one message with the Boss\'s fields - budget, count and ranking, quality, entry, stop, targets with TZ-38\'s '
         'shares, capital, leverage, margin, loss, invalidation, unallocated', len(view) == 1 and all(k in first for k in (
-            'Бюджет 10 000 USDT', 'стоп не дальше 14,0% входа', 'Подходящих сделок: 2 из 3 запрошенных', '1) 🟢 <b>ETH · LONG</b> · ★ STRONG',
-            '2) 🟢 <b>XRP · LONG</b>', 'Качество: z', 'Вход:', '⛔ Стоп:', '· дошли 47%', 'Капитал:', 'плечо', 'маржа', 'Потеря на стопе:',
-            'Свободно', 'Размещено', 'Инвалидация:')))
+            'Бюджет 10 000 USDT', 'STRONG на любом месте рейтинга, стоп не дальше 14,0% входа', 'Подходящих сделок: 2 из 2 запрошенных',
+            '1) 🟢 <b>ETH · LONG</b> · ★ STRONG\n', '2) 🟢 <b>ADA · LONG</b> · ★ STRONG · вне ТОП-3', 'Качество: z', 'Вход:', '⛔ Стоп:',
+            '· дошли 47%', 'Капитал:', 'плечо', 'маржа', 'Потеря на стопе:', 'Свободно', 'Размещено', 'Инвалидация:')))
     chk('plan_parts: each trade its confidence with the note that the sizes are unproven; no six ratings; the rejected and the weaker named',
-        first.count('Уверенность: <b>1/5</b> — правило не доказано · размеры — формула Архитектора, не доказана') == 2
-        and 'Оценка доверия' not in first and 'Отклонены: SOL SHORT — стоп 15,0% дальше 14,0%' in first
-        and 'В ТОП-3 без STRONG — не берутся: BTC' in first and 'не доказанная' in first)
-    chk('plan_parts: one Telegram part, balanced markup; five requested says STRONG is at most three; none qualifying says so',
-        len(chunks(first)) == 1 and all(first.count('<%s>' % t) == first.count('</%s>' % t) for t in ('b', 'i'))
-        and 'больше 3 сделок не будет' in plan_parts(fr, plan(fr, stage, 15000.0, 5, 0.5, {}))[0]
-        and 'Подходящих сделок нет' in plan_parts(*pl([('SOL', -1, 2.5, 15.0, True)], rets={'SOL': A}))[0])
+        first.count('Уверенность: <b>1/5</b> — правило не доказано · размеры — формула Архитектора, не доказана') == 3
+        and 'Оценка доверия' not in first and 'Отклонены: XRP SHORT — стоп 15,0% дальше 14,0%' in first
+        and 'Без STRONG среди первых 2 по силе — не берутся: SOL' in first and 'не доказанная' in first and 'больше 3 сделок не будет' not in first)
+    chk('plan_parts: the more under «Дополнительные STRONG-кандидаты» after the placed, each a trade of its own at the average risk with '
+        'its correlation with the placed ones, the loss of all together against the 5 % limit, the footnote on STRONG beyond the TOP-3 (TZ-40)',
+        'Ещё 1 STRONG проходит лимиты — ниже, в «Дополнительные STRONG-кандидаты»' in first
+        and first.index('2) 🟢 <b>ADA') < first.index('<b>Дополнительные STRONG-кандидаты</b> — сверх запрошенных 2, в «Итог» не входят: '
+                                                     'каждая посчитана как одна сделка с риском 0,5% бюджета (50 USDT)') < first.index('3) 🟢 <b>BNB · LONG</b> · ★ STRONG · вне ТОП-3')
+        and 'Вместе с основными потеря на стопах — 150 USDT = 1,50% бюджета\n' in first and 'больше лимита' not in first
+        and 'вне распределения — одна сделка · корреляция с основными +0,50' in first and 'Капитал: <b>490 USDT</b>' in first
+        and first.count(adv3.BEYOND) == 1)
+    vw = plan_parts(rw, pw)[0]
+    chk('plan_parts: more beyond 5 % of the budget says to take them instead of the placed ones, not on top; all within the TOP-3 no footnote',
+        'больше лимита 5%: брать вместо основных, а не вдобавок' in vw and 'Ещё 5 STRONG проходят лимиты' in vw
+        and adv3.BEYOND in vw and adv3.BEYOND not in plan_parts(scen2(ga[:1]), plan_strong(scen2(ga[:1]), csa, 10000.0, 3, 0.5, {}))[0])
+    chk('plan_parts: balanced markup; none qualifying says so',
+        all(first.count('<%s>' % t) == first.count('</%s>' % t) for t in ('b', 'i'))
+        and 'Подходящих сделок нет' in plan_parts(scen2([('SOL', -1, 2.5, 15.0, 4)]), plan_strong(scen2([('SOL', -1, 2.5, 15.0, 4)]),
+                                                                                                    {'SOL': series(A)}, 10000.0, 3, 0.5, {}))[0])
 
     wk = [100 * 1.01 ** i for i in range(150)]
     wk.append(wk[-1] * 0.86)
@@ -1364,9 +1647,11 @@ def selftest():
         and weak_lines([('BTC', 1)]) == ['ℹ️ Ослабление: BTC LONG — сумма знаков упала с ±4 до ±2, сигнал держится; по правилу это не выход'])
 
     # ---- alerts, zones and the check's message ------------------------------------------------------------------------
-    p_ = plan(rep0, cs, D2, 3, 0.5, {})
+    p_ = plan_strong(rep0, cs, D2, 3, 0.5, {})
     placed = candidates(p_)
-    chk('the synthetic market has STRONG coins the allocation places', len(placed) >= 1 and set(c for c, _ in placed) <= set(rep0['strong']))
+    chk('the synthetic market: the default allocation places the TOP-3\'s three STRONG and the nine beyond them pass as more; the '
+        'candidates are the twelve, placed first', [x['card']['coin'] for x in p_['items']] == rep0['strong'] == order[:3]
+        and [x['card']['coin'] for x in p_['more']] == order[3:] and [c for c, _ in placed] == strong_all(rep0))
     c0 = placed[0]
     fol0 = [dict(f5, key=k_long, state='stop', day=str(last), price=90.0, close=100.0, stop=91.0),
             dict(f5, key=('ETH', 1, '2026-11-01'), coin='ETH', close_of='2026-11-01', state='touch', day=str(last + adv3.DAY), price=1.0, stop=2.0),
@@ -1392,19 +1677,29 @@ def selftest():
         and [z['mode'] for z in zn] == ['none'] and zones_left(rep0, off_z, fol_z) == []
         and zones_left(run, {k_z: dict(off_z[k_z], close_of='2026-01-01')}, fol_z) == [])
     now0 = at(last + adv3.DAY, 0, 10)
-    prev_same = {'top': rep0['top'], 'strong': rep0['strong'], 'signals': {c: rep0['rows'][c].get('signal') for c in adv3.COINS}}
-    still = dict(rep0, rows={c: dict(r, prev=r.get('signal')) for c, r in rep0['rows'].items()})
+    prev_same = {'top': rep0['top'], 'strong': rep0['strong'], 'signals': {c: rep0['rows'][c].get('signal') for c in adv3.COINS},
+                 'strong_all': list(reversed(strong_all(rep0)))}
+    still = top_n(dict(rep0, rows={c: dict(r, prev=r.get('signal')) for c, r in rep0['rows'].items()}), 3)
     t1, q1, o1, cards1 = compose((last + adv3.DAY, 'signal'), still, [], [], p_, [], prev_same, now0)
     t1w, q1w, o1w, _c = compose((last + adv3.DAY, 'signal'), still, [], [], p_, [], prev_same, now0, [(order[0], 1)])
     chk('compose: a signal check that finds nothing is one quiet line naming the TOP-3, offering no card; a weakening makes it full and quiet',
         q1 and o1 and cards1 == [] and '\n' not in t1 and t1.startswith('✓ 04:10 по Батуми') and ', '.join(rep0['top']) in t1
         and q1w and not o1w and 'ℹ️ Ослабление' in t1w)
+    t1a = compose((last + adv3.DAY, 'signal'), still, [], [], p_, [], dict(prev_same, strong_all=order[:-1]), now0)
+    t1b = compose((last + adv3.DAY, 'signal'), still, [], [], p_, [], {k: v for k, v in prev_same.items() if k != 'strong_all'}, now0)
+    chk('compose: the STRONG at every rank not as at the check before - one gained - or a check before that does not record them (TZ-39\'s) '
+        'make the signal check full and quiet; their order alone does not (TZ-40)', not t1a[2] and t1a[1] and not t1b[2] and t1b[1])
     flip = order[-1]
-    moved = dict(still, rows=dict(still['rows'], **{flip: dict(still['rows'][flip], prev=-still['rows'][flip]['signal'])}))
+    moved = top_n(dict(still, rows=dict(still['rows'], **{flip: dict(still['rows'][flip], prev=-still['rows'][flip]['signal'])})), 3)
     t2, q2, o2, cards2 = compose((last + adv3.DAY, 'signal'), moved, fol0, [], p_, [], prev_same, now0)
-    chk('compose: a signal check with the day\'s changes is the full message, quiet without an alert, its cards offered, no methodology',
-        q2 and not o2 and cards2 == rep0['cards'] and 'STRONG-кандидаты' in t2 and 'Сделки по карточкам бота' in t2 and '🔄 Разворот' in t2
-        and 'XRP LONG — карточка' in t2 and 'Оценка доверия' not in t2 and 'Форвард с' not in t2 and '🔔' not in t2)
+    chk('compose: a signal check with the day\'s changes is the full message, quiet without an alert, its cards offered - the TOP-3\'s and '
+        'the nine STRONG beyond them - no methodology', q2 and not o2 and cards2 == moved['cards'] and len(cards2) == 12
+        and [cd['extra'] for cd in cards2] == [False] * 3 + [True] * 9 and 'STRONG-кандидаты' in t2 and 'Сделки по карточкам бота' in t2
+        and '🔄 Разворот' in t2 and 'XRP LONG — карточка' in t2 and 'Оценка доверия' not in t2 and 'Форвард с' not in t2 and '🔔' not in t2)
+    chk('compose: the signal check\'s message carries the TOP-3, the nine STRONG beyond it in their own section, and among the candidates '
+        'the three placed and the nine more, each beyond the TOP-3 marked (TZ-40)', t2.count('Основание: сумма знаков') == 12
+        and '<b>Дополнительные STRONG-кандидаты</b> — за ТОП-3' in t2 and t2.count('— проходит, сверх 3 (одна сделка): капитал') == 9
+        and t2.count('— проходит: капитал') == 3 and t2.count(adv3.BEYOND_TAG + ' — проходит') == 9 and t2.count(adv3.BEYOND) == 1)
     t3, q3, o3, _ = compose((last + adv3.DAY, 'signal'), still, fol0, al, p_, [], prev_same, now0)
     chk('compose: an alert makes the signal check loud and full, the events right after the header, a new candidate marked',
         not q3 and not o3 and t3.index('🔔 <b>События</b>') < t3.index('Изменения за день') and '⛔ ETH LONG' in t3
@@ -1419,8 +1714,12 @@ def selftest():
     chk('compose: a fact check with alerts is loud, carries each new candidate\'s plan and offers its card, no other card',
         not q6 and not o6 and '🔔 <b>События</b>' in t6 and 'теперь проходит лимиты' in t6 and t6.count('Капитал:') == len(placed)
         and [cd['coin'] for cd in cards6] == [c for c, _ in placed] and 'сегодня (минимум дня' in t6)
-    chk('compose: every message balances its markup and fits one Telegram part', all(
-        len(chunks(t)) == 1 and t.count('<b>') == t.count('</b>') and t.count('<i>') == t.count('</i>') for t in (t1, t2, t3, t4, t5, t6)))
+    chk('compose: a new candidate beyond the placed ones is announced as a trade of its own, outside the allocation (TZ-40)',
+        t6.count('; сверх 3 — как одна сделка):') == 9 and t6.count('вне распределения — одна сделка') == 9
+        and t6.count('из ±4 · доля ') == 3)
+    chk('compose: every part of every message balances its markup; the quiet lines are one part each', all(
+        all(x.count('<b>') == x.count('</b>') and x.count('<i>') == x.count('</i>') for x in chunks(t)) for t in (t1, t2, t3, t4, t5, t6))
+        and len(chunks(t1)) == len(chunks(t4)) == 1)
     recq = check_record((last + adv3.DAY, 'signal'), rep0, fol0 + [dict(fol0[0], state='closed')], al, p_, [], [7, 8], False, False, cards2, now0,
                         [('XRP', 1)])
     chk('check_record: kind, slot, flags, every coin\'s state with the ranks, the followed trades but the closed, the alerts with their '
@@ -1430,8 +1729,12 @@ def selftest():
         and all(recq['state'][c]['rank'] == order.index(c) + 1 for c in order) and len(recq['followed']) == 4
         and recq['alerts'] == al and recq['passing'] == [list(x) for x in placed] and recq['message_ids'] == [7, 8] and recq['weakened'] == [['XRP', 1]]
         and set(recq['trust']) >= {'system', 'strong_justified', 'cards', 'quality', 'expectancy_established'}
-        and [c['confidence'] for c in recq['cards']] == [rep0['trust']['cards'][cd['coin']] for cd in cards2]
+        and [c['confidence'] for c in recq['cards']] == [moved['trust']['cards'][cd['coin']] for cd in cards2]
         and json.loads(json.dumps(recq, default=str))['utc'] == now0.isoformat(timespec='seconds'))
+    chk('check_record: the STRONG at every rank in the rule\'s order, the allocation\'s more in the placed trades\' shape, each card '
+        'whether it was extra (TZ-40)', recq['strong_all'] == order and [x['coin'] for x in recq['alloc']['more']] == order[3:]
+        and set(recq['alloc']['more'][0]) == set(recq['alloc']['items'][0]) == {'coin', 'side', 'notional', 'leverage', 'margin', 'loss'}
+        and [c['extra'] for c in recq['cards']] == [False] * 3 + [True] * 9)
 
     # ---- three checks end to end: Binance and Telegram stood in for, the journal in a scratch directory ------------------
     class Cap(Telegram):
@@ -1488,18 +1791,18 @@ def selftest():
             e2 = check(cap, stub, (last + adv3.DAY, 'fact'), nowf)
             append(e2)
             e3 = check(cap, stub, (last + adv3.DAY, 'fact'), nowf)
-        n_sent = len(cap.sent)
-        chk('end to end: the signal check sends the full message, quiet with no alert, records 42 states, its cards and the placed coins',
-            e1['kind'] == 'check' and e1['slot'] == slot_text((last + adv3.DAY, 'signal')) and not e1['one_line']
-            and e1['quiet'] == (not e1['alerts']) == cap.sent[0][1] and len(e1['state']) == 42 and e1['cards']
-            and e1['passing'] == [list(x) for x in placed] and all(a['kind'] == 'candidate' for a in e1['alerts'])
-            and len(e1['alerts']) == len(placed))
+        n_sent, k1, k2 = len(cap.sent), len(e1['message_ids']), len(e2['message_ids'])
+        chk('end to end: the signal check sends the full message in parts, quiet with no alert, records 42 states, its twelve cards and the '
+            'twelve coins that pass', e1['kind'] == 'check' and e1['slot'] == slot_text((last + adv3.DAY, 'signal')) and not e1['one_line']
+            and k1 >= 2 and all(q == e1['quiet'] for _t, q in cap.sent[:k1]) and e1['quiet'] == (not e1['alerts']) and len(e1['state']) == 42
+            and len(e1['cards']) == 12 and e1['passing'] == [list(x) for x in placed] and all(a['kind'] == 'candidate' for a in e1['alerts'])
+            and len(e1['alerts']) == len(placed) and e1['strong_all'] == order)
         chk('end to end: the fact check reads the forming candle through the stop of the offer the old daily record made - one loud alert',
             [(a['kind'], a['coin'], a['touch']) for a in e2['alerts']] == [('stop', top0, True)] and e2['quiet'] is False
-            and cap.sent[1][1] is False and 'задет сегодня' in cap.sent[1][0] and e2['one_line'] is False)
+            and cap.sent[k1][1] is False and 'задет сегодня' in cap.sent[k1][0] and e2['one_line'] is False)
         chk('end to end: the same fact check again sends no second alert - the offer is closed - and finds the candidates placed before',
-            e3['alerts'] == [] and e3['quiet'] is True and n_sent == 3 and not [f for f in e3['followed'] if f['coin'] == top0 and f['close_of'] == str(last)
-                                                                                and f['U'] == r0['U'] * 0.25])
+            e3['alerts'] == [] and e3['quiet'] is True and n_sent == k1 + k2 + 1 and len(e3['message_ids']) == 1
+            and not [f for f in e3['followed'] if f['coin'] == top0 and f['close_of'] == str(last) and f['U'] == r0['U'] * 0.25])
         recs2 = list(journal_records())
         chk('end to end: the journal parses past its broken line, holds the old record and the two checks, in order',
             [r['kind'] for r in recs2] == ['daily', 'check', 'check'] and recs2[1]['utc'] == now0.isoformat(timespec='seconds'))
@@ -1507,10 +1810,13 @@ def selftest():
         def fake_make_fail(*a_, **k_):
             raise RuntimeError('fapi.binance.com served no candles')
 
-        cap2 = Cap()
+        cap2, per = Cap(), []
         with contextlib.redirect_stdout(io.StringIO()):
             for text in ('сигнал', 'сигнал топ 7', 'оценка', 'сигнал 10000 топ 3', 'привет'):
+                n0 = len(cap2.sent)
                 handle(cap2, stub, text)
+                per.append('\n'.join(t for t, _q in cap2.sent[n0:]))
+            n5 = len(cap2.sent)
             kinds = [r['kind'] for r in list(journal_records())[3:]]
             saved_lr = globals()['live_report']
             globals()['live_report'] = fake_make_fail
@@ -1521,17 +1827,22 @@ def selftest():
                 globals()['live_report'] = saved_lr
         texts = [t for t, _q in cap2.sent]
         recs3 = list(journal_records())
-        chk('handle: «сигнал» three cards, «сигнал топ 7» seven, «оценка» the assessment, the allocation one message, an unknown text HELP',
-            texts[0].count('Основание:') == 3 and texts[1].count('Основание:') == 7 and texts[2].startswith('🧭') and 'Оценка доверия' in texts[2]
-            and texts[3].startswith('💼') and texts[4] == HELP and all(q is False for _t, q in cap2.sent[:5]))
-        chk('handle: the journal holds request, request, assess, alloc, each with its cards; an unknown text no record',
-            kinds == ['request', 'request', 'assess', 'alloc'] and recs3[3]['n'] == 3 and recs3[4]['n'] == 7
-            and recs3[5]['cards'] == [] and 'trust' in recs3[5] and len(recs3[6]['cards']) == len(placed))
+        chk('handle: «сигнал» the TOP-3 and the nine STRONG beyond it, «сигнал топ 7» the seven and five, «оценка» the assessment, the '
+            'allocation its three and nine more, an unknown text HELP; every part with a notification',
+            per[0].count('Основание:') == 12 and len(re.findall(r'ранг \d+ — за ТОП-3', per[0])) == 9 and per[1].count('Основание:') == 12
+            and len(re.findall(r'ранг \d+ — за ТОП-7', per[1])) == 5 and per[2].startswith('🧭') and 'Оценка доверия' in per[2] and 'на семи местах дал +0,51 R' in per[2]
+            and per[3].startswith('💼') and per[3].count('Капитал:') == 12 and per[4] == HELP and all(q is False for _t, q in cap2.sent[:n5]))
+        chk('handle: the journal holds request, request, assess, alloc, each with its cards; an unknown text no record; the allocation\'s '
+            'cards its twelve trades and its record their nine more', kinds == ['request', 'request', 'assess', 'alloc'] and recs3[3]['n'] == 3
+            and recs3[4]['n'] == 7 and recs3[5]['cards'] == [] and 'trust' in recs3[5] and len(recs3[6]['cards']) == len(placed)
+            and len(recs3[6]['alloc']['more']) == 9 and len(recs3[3]['cards']) == 12)
         chk('handle: Binance down gets the apology, Telegram down raises nothing', texts[-1].startswith('Binance или Telegram не ответили'))
     finally:
         globals()['STATE'], adv3.fapi = saved
         shutil.rmtree(state)
     chk('glibc takes its two settings', malloc_tune())
+    time.sleep = real_sleep
+    chk('the self-test restored time.sleep and paused nowhere: every pause recorded', time.sleep is real_sleep and all(x in (1.1, 8, 61) for x in slept))
     print(f'SELFTEST PASS: {len(done)} of {len(done)} checks passed')
 
 

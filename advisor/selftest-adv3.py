@@ -2,6 +2,7 @@
 # selftest-adv3.py - the Architect's checks of adv3.py's mechanics on synthetic candles; no network.
 # Every expectation is computed here by hand or by an independent formula, never by adv3.py itself.
 # TZ-39: the message without its methodology, each card's confidence, the reach shares without survivorship, the assessment.
+# TZ-40: a STRONG card beyond the TOP-3 says so, the cards marked extra under their own heading, the assessment on STRONG with seven places.
 import datetime as dt, importlib.util, math, os, random
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -151,6 +152,26 @@ check('a card with no entry reads 0/5, «входа нет»; without current pr
       a.card_lines(none_card, a.FACTS, 0)[-1] == 'Уверенность: <b>0/5</b> — входа нет'
       and a.card_lines(plain_card, a.FACTS, 0)[-1] == 'Уверенность: <b>0/5</b> — нет текущей цены Binance'
       and not any('Уверенность' in l for l in a.card_lines(plain_card, a.FACTS)))
+head = lambda cd: a.card_lines(cd, a.FACTS)[0]
+check('a STRONG card ranked beyond the TOP-3 carries «· вне ТОП-3»; one ranked within it, or not STRONG, or with no rank, does not (TZ-40)',
+      head(dict(strong_card, rank=4)).endswith(' · ★ STRONG · вне ТОП-3') and head(dict(strong_card, rank=3)).endswith(' · ★ STRONG')
+      and head(dict(plain_card, rank=5)).endswith('</b>') and head(dict(strong_card, rank=None)).endswith(' · ★ STRONG'))
+check('a card marked extra gives its rank beyond the list; a card of the list its rank of N (TZ-40)',
+      any(l.endswith('ранг 5 — за ТОП-3') for l in a.card_lines(dict(strong_card, rank=5, of=3, extra=True), a.FACTS))
+      and any(l.endswith('ранг 2 из 7') for l in a.card_lines(dict(strong_card, rank=2, of=7, extra=False), a.FACTS)))
+order6 = sorted([c for c in a.COINS if rows.get(c, {}).get('signal') in (1, -1)], key=lambda c: -abs(rows[c]['z']))
+extras = [dict(a.card(c, rows[c], True, 10000.0, 0.5), rank=k, of=3, extra=True) for k, c in enumerate(order6[3:5], 4)]
+with_extra = dict(rep, cards=rep['cards'] + extras)
+mx = a.message(with_extra, a.FACTS)
+check('the message: the cards marked extra under «Дополнительные STRONG-кандидаты» after the TOP-3 and before the other signals, '
+      'each with its basis; the line on STRONG beyond the TOP-3 once; neither in a message without them (TZ-40)',
+      mx.index('ТОП-3 по силе тренда') < mx.index('<b>Дополнительные STRONG-кандидаты</b> — за ТОП-3') < mx.index('Остальные сигналы')
+      and mx.count('Основание: сумма знаков') == 5 and mx.count(a.BEYOND) == 1 and mx.count(' · ★ STRONG · вне ТОП-3') == 2
+      and 'Дополнительные STRONG' not in msg and a.BEYOND not in msg and all(c not in mx.split('Остальные сигналы')[1] for c in order6[:5]))
+check('the assessment: STRONG beyond the TOP-3 is not the measured strategy, with E6\'s mean R a trade at seven places and at three',
+      '★ STRONG вне ТОП-3 — те же условия и тот же расчёт, но не измеряемая стратегия' in ass
+      and 'STRONG на семи местах дал +0,51 R на сделку против +0,80 на трёх; дальше седьмого места не измерено' in ass
+      and (a.PIT['strong']['mean_R_P7'], a.PIT['strong']['mean_R_P3']) == (0.5084, 0.7962))
 
 # 7. G-HISTORY's comparison: equal facts read equal, one changed fact reads DIFFERENT
 h = {k: {'trades': f['trades'], 'wins': f['wins'], 'mean_R': f['mean_R'] + 1e-6, 'median_days': f['median_days'],
