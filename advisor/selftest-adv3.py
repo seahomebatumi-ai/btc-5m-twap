@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # selftest-adv3.py - the Architect's checks of adv3.py's mechanics on synthetic candles; no network.
 # Every expectation is computed here by hand or by an independent formula, never by adv3.py itself.
-import datetime as dt, importlib.util, math, os, random, sys
+# TZ-39: the message without its methodology, each card's confidence, the reach shares without survivorship, the assessment.
+import datetime as dt, importlib.util, math, os, random
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location('adv3', os.path.join(HERE, 'adv3.py'))
@@ -106,19 +107,50 @@ check('the message holds its sections', all(k in msg for k in ('ТОП-3', '⛔ 
                                                                'Уверенность', 'Остальные сигналы')))
 check('each card holds its basis and its invalidation, ranks 1 to 3', msg.count('Основание: сумма знаков') == 3
       and msg.count('Инвалидация: цена') == 3 and [cd['rank'] for cd in rep['cards']] == [1, 2, 3])
-check('the message holds the forward book and the six ratings', all(k in msg for k in (
-    'Форвард с 28.10', 'Оценка доверия', 'Надёжность системы: <b>1/5</b>', 'Уверенность в сделках:',
-    'STRONG обоснован: <b>нет</b>', 'Качество данных: <b>низкое</b>', 'Ожидаемая R на сделку: <b>не установлена</b>',
-    'Инвалидация: у каждой карточки')))
+check('the message carries no methodology: no forward book, no six ratings, no history block, one footer line',
+      not any(k in msg for k in ('Форвард с 28.10', 'Оценка доверия', 'Надёжность системы', 'история 2020–2026',
+                                 'Прибыль дают редкие', 'Открытые STRONG-сделки')) and msg.rstrip().endswith('на чём держится уверенность</i>'))
+check('without current prices each card reads its confidence 0/5, «нет текущей цены»',
+      msg.count('Уверенность: <b>0/5</b> — нет текущей цены Binance') == len(rep['cards']) == 3)
+ass = a.assessment(rep, a.FACTS)
+check('the assessment holds the rung, the next readings, the six ratings, the forward book and the history', all(k in ass for k in (
+    'Уверенность: <b>1/5</b> — рубеж 1 из 5', 'после закрытия 28.10.2027', 'после закрытия 31.10.2027', 'Оценка доверия',
+    'Надёжность системы: <b>1/5</b>', 'Уверенность в сделках:', 'STRONG обоснован: <b>нет</b>', 'Качество данных: <b>низкое</b>',
+    'Ожидаемая R на сделку: <b>не установлена</b>', 'Инвалидация: у каждой карточки', 'Форвард с 28.10', 'Gate H, Gate S'))
+      and bool(rep['strong_open']) and 'Открытые STRONG-сделки правила: ' in ass)
+check('the assessment quotes STRONG at the random lists\' median and the rule outside the 42, never the 42\'s STRONG mean',
+      '+0,22 R' in ass and '+0,04 R' in ass and '0,55' not in ass and '0,5473' not in ass and '+0,16' not in ass)
+check('its markup balances and it fits one Telegram message', all(ass.count('<%s>' % t) == ass.count('</%s>' % t) for t in ('b', 'i'))
+      and len(ass) <= 4000)
+word = {1: 'ЛОНГ', -1: 'ШОРТ'}
+rows = rep['rows']
+by_hand = ([(c, rows[c]['signal']) for c in a.COINS if rows[c].get('signal') in (1, -1) and rows[c].get('prev') not in (1, -1)],
+           [c for c in a.COINS if rows[c].get('signal') not in (1, -1) and rows[c].get('prev') == 1],
+           [c for c in a.COINS if rows[c].get('signal') not in (1, -1) and rows[c].get('prev') == -1],
+           [(c, rows[c]['signal']) for c in a.COINS if rows[c].get('signal') in (1, -1) and rows[c].get('prev') in (1, -1)
+            and rows[c]['signal'] != rows[c]['prev']])
+check('changes: the day\'s new, exits and reversals as the rows say', a.changes(rep) == by_hand)
+moved = dict(rep, rows=dict(rows, **{a.COINS[0]: dict(rows[a.COINS[0]], prev=-rows[a.COINS[0]]['signal'])}))
+check('changes: a reversed coin is a reversal, and the message names it', a.changes(moved)[3] == [(a.COINS[0], rows[a.COINS[0]]['signal'])]
+      and f"{a.COINS[0]} в {word[rows[a.COINS[0]]['signal']]}" in a.message(moved, a.FACTS))
+framed = a.message(dict(rep, n=7), a.FACTS, head=['HEAD-LINE'], tail=['TAIL-LINE'])
+check('head follows the header, tail precedes the other signals, the TOP-N label is the report\'s n',
+      framed.index('HEAD-LINE') < framed.index('Изменения за день') < framed.index('ТОП-7 по силе тренда')
+      < framed.index('TAIL-LINE') < framed.index('Остальные сигналы'))
 bk = rep['book']['base']
 check('the book: opened is closed plus open, and the total is the sum of its two parts',
       bk['opened'] == bk['closed'] + bk['open'] and abs(bk['total_R'] - (bk['closed_R'] + bk['open_R'])) < 1e-9)
 strong_card = dict(rep['cards'][0], strong=True)
 plain_card = dict(rep['cards'][0], strong=False)
-check('a STRONG card shows the STRONG shares 48 / 28 / 18%',
-      [l.rsplit('дошли ', 1)[1] for l in a.card_lines(strong_card, a.FACTS) if 'дошли' in l] == ['48%', '28%', '18%'])
-check('another card shows the rule\'s shares 23 / 13 / 8%',
+check('a STRONG card shows TZ-38\'s STRONG shares without survivorship, 47 / 29 / 19%',
+      [l.rsplit('дошли ', 1)[1] for l in a.card_lines(strong_card, a.FACTS) if 'дошли' in l] == ['47%', '29%', '19%'])
+check('another card shows the rule\'s shares without survivorship, 23 / 13 / 8%',
       [l.rsplit('дошли ', 1)[1] for l in a.card_lines(plain_card, a.FACTS) if 'дошли' in l] == ['23%', '13%', '8%'])
+none_card = dict(rep['cards'][0], mode='none', entry=None)
+check('a card with no entry reads 0/5, «входа нет»; without current prices 0/5 «нет текущей цены»; no confidence, no line',
+      a.card_lines(none_card, a.FACTS, 0)[-1] == 'Уверенность: <b>0/5</b> — входа нет'
+      and a.card_lines(plain_card, a.FACTS, 0)[-1] == 'Уверенность: <b>0/5</b> — нет текущей цены Binance'
+      and not any('Уверенность' in l for l in a.card_lines(plain_card, a.FACTS)))
 
 # 7. G-HISTORY's comparison: equal facts read equal, one changed fact reads DIFFERENT
 h = {k: {'trades': f['trades'], 'wins': f['wins'], 'mean_R': f['mean_R'] + 1e-6, 'median_days': f['median_days'],
@@ -163,6 +195,8 @@ check('intervals and marks parsed', intervals == {'BTWUSDT': 4} and marks == {'X
 rep2 = a.report(cs, funds, {k + 'USDT': (cs[k][max(cs[k])][3], 0.0001) for k in cs}, 10000.0, 0.5, 0, (),
                 {a.COINS[0] + 'USDT': 4})
 hours = {cd['coin']: cd['funding_h'] for cd in rep2['cards']}
+check('with current prices each card offering an entry reads the rung, 1/5 «правило не доказано»',
+      a.message(rep2, a.FACTS).count('Уверенность: <b>1/5</b> — правило не доказано') == sum(cd['mode'] != 'none' for cd in rep2['cards']) == 3)
 check('a card carries its funding interval: 4 h adjusted, 8 h otherwise',
       all(h == (4 if c == a.COINS[0] else 8) for c, h in hours.items()) and rep2['marks_ok'])
 
