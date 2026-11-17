@@ -25,7 +25,8 @@ them: file BLOCKED and stop.
 The only trigger is `EXECUTE TZ-NN` in Claude Code. On that trigger, in this order:
 
 1. `git checkout main && git pull` — work from the current `main`.
-2. Read `CryptoTZ/TZ-NN-<name>.md` in full. Read `SYSTEM-MAP.md` in full.
+2. Read `CryptoTZ/TZ-NN-<name>.md` in full. Of `SYSTEM-MAP.md`, read §0 and every section, row and item
+   the TZ's header names, in full, and any other passage of it the TZ cites, where it cites it.
 3. **Fingerprint gate.** The TZ header states a required System Map revision string and
    content anchors. Compare them to `SYSTEM-MAP.md` §0. Any mismatch → **BLOCKED**, no work.
 4. Compute `wc -l` and `sha256sum` for every file listed in the map's §0 fingerprint table.
