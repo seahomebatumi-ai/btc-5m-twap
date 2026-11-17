@@ -1,11 +1,10 @@
-# btc-5m-twap: the reward book's archive, daily at 01:30:20 UTC and 1,800 s after the timer starts (TZ-34).
+# btc-5m-twap: the reward book's archive, every three hours from 01:30:20 UTC, and no run on a start of the timer (TZ-46).
 # Installed byte for byte as /etc/systemd/system/btc-rewardbook-archive.timer; its stop is systemctl disable --now.
 [Unit]
-Description=btc-5m-twap reward book archive, once a day
+Description=btc-5m-twap reward book archive, every three hours
 
 [Timer]
-OnCalendar=*-*-* 01:30:20 UTC
-OnActiveSec=1800
+OnCalendar=*-*-* 01/3:30:20 UTC
 AccuracySec=1s
 Unit=btc-rewardbook-archive.service
 
