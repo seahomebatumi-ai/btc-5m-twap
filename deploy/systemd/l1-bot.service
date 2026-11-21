@@ -1,0 +1,29 @@
+# btc-5m-twap: L1's unit, rule W live at the minimum size from the live host in Sofia (TZ-53, CANON PART II).
+# Installed byte for byte as /etc/systemd/system/l1-bot.service on the live host alone. Its stop is
+# systemctl disable --now; the Boss's is «Стоп» in its Telegram chat; the last, the session key's revocation.
+[Unit]
+Description=L1 - rule W live at the minimum size, the bot's orders from the live host
+Wants=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=3600
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/root/l1-bot-svc
+ExecStart=/root/l1-env/bin/python -B -u /root/l1-bot-svc/l1-bot.py serve
+Environment=LC_ALL=C TZ=UTC
+Restart=on-failure
+RestartSec=30
+RestartPreventExitStatus=2 3
+TimeoutStopSec=60
+MemoryMax=384M
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/l1-bot
+StandardOutput=append:/var/lib/l1-bot/service.log
+StandardError=append:/var/lib/l1-bot/service.log
+
+[Install]
+WantedBy=multi-user.target
