@@ -1,8 +1,8 @@
 # btc-5m-twap: the liquidation guard - the Boss's Binance Futures positions read every five seconds by a key that can
-# read and nothing else, Telegram and Pushover's emergency alarm as they near liquidation (TZ-54, CANON PART VII).
+# read and nothing else: three stages of calls as they near liquidation, their gains told (TZ-55, CANON PART VII).
 # Installed byte for byte as /etc/systemd/system/liq-guard.service; its stop is systemctl disable --now. It never trades.
 [Unit]
-Description=Liquidation guard, the Boss's Binance Futures positions watched for liquidation
+Description=Liquidation guard, the Boss's Binance Futures positions watched for liquidation and for their gains
 Wants=network-online.target
 After=network-online.target time-sync.target
 StartLimitIntervalSec=0
@@ -18,6 +18,7 @@ RestartPreventExitStatus=2
 TimeoutStartSec=120
 WatchdogSec=300
 MemoryMax=96M
+UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict

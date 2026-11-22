@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""liq-guard.py - the liquidation guard (TZ-54, CANON PART VII): the Boss's Binance USD-M futures positions read
-every five seconds through a key that can read and nothing else, each position's distance from its mark price to its
-liquidation price held against three thresholds of his - a Telegram message, then Pushover's emergency alarm, then a
-second one - and the guard's own loss of Binance alarmed the same way. It never trades and holds no key that can.
-Standard library only; every connection IPv4, because the key is bound to the host's IPv4 address.
+"""liq-guard.py - the liquidation guard, its second version (TZ-55, CANON PART VII): the Boss's Binance USD-M futures
+positions read every five seconds through a key that can read and nothing else. For each position, two things:
+its distance from the mark price to the liquidation price, held against his three stages - a loud notice, Pushover's
+emergency alarm, a last alarm - each with the margin that moves the liquidation price to his target; and its gain from
+the entry price - told from his threshold on, at each new record, and when the price gives back a third and a half of
+the record. An alarm he acknowledges, or the card's «Я в деле», silences every call about that position while he
+works, and its card in Telegram updates itself; margin he adds is seen and confirmed. Every message about a position
+opens with its side's colour - green for a long, red for a short - and goes through that side's own Pushover
+application where he made one. The guard's own loss of Binance is alarmed too. It never trades and holds no key that
+can. Standard library only; every connection IPv4, because the key is bound to the host's IPv4 address.
 
 Modes:
-    secrets     the Boss, at his terminal: the Binance key and secret, the Pushover user key and token, the Telegram
-                token, the dead-man's ping address or none - each hidden, each written once, 0600, root's
+    secrets     the Boss, at his terminal: each credential not yet on the host - the Binance key and secret, the
+                Pushover user key and the three application tokens, the Telegram token, the dead-man's ping address -
+                each hidden, each written once, 0600, root's; the optional ones may be skipped
     find-chat   the one private chat that sent /start to the guard's bot, pinned
-    prove       every request path proved through this file's own functions, the key's permissions read, and a test
-                alarm acknowledged on the Boss's phone (CANON hard rule 14); its record prove.json
+    prove       every request path proved through this file's own functions, the key's permissions read, what the
+                guard sees and how its alerts look confirmed by the Boss, and a test alarm acknowledged on his phone
+                (CANON hard rule 14); its record prove.json
     serve       the unit's loop, under systemd, Type=notify with a watchdog
     status      the guard's own state from its files - no symbol, price, size or margin is printed
     scan FILE.. G-PRINT: in each file, the occurrences of every credential, the chat id and this host's own IPv4
@@ -23,8 +30,10 @@ import datetime as dt
 import getpass
 import hashlib
 import hmac
+import html
 import http.client
 import json
+import math
 import os
 import re
 import signal
@@ -56,9 +65,19 @@ HC_S, TICK_S, STATE_S = 60, 600, 30
 ERR_EVERY_S = 60             # one journal line a minute for a repeating error
 KEEP_DAYS = 90               # journal files older than this are removed at the tick
 BACKOFF_S = {429: 60, 418: 300}   # Binance's rate refusals: no request to it until this has passed
-DEFAULT_THRESHOLDS = (5.0, 3.0, 1.5)   # percent of the mark price: Telegram, the alarm, the second alarm
-REARM_PP = 1.0                # a level re-arms once the distance is this many points above its threshold
-TARGET_PCT = 8.0              # the distance the margin hint aims the liquidation price at
+DEFAULT_THRESHOLDS = (5.0, 3.0, 1.5)   # percent of the mark price: the three stages; the Boss's own are kept
+REARM_PP = 1.0                # a stage re-arms once the distance is this many points above its threshold
+TARGET_PCT = 5.0              # the distance the margin hint aims the liquidation price at - the Boss's; «Цель N»
+PROFIT_FROM = 7.0             # the gain from the entry, percent of the price, from which records are told; «Прибыль N»
+RECORD_STEP_PP, RECORD_STEP_X = 3.0, 1.25   # the next record: 3 points above the last told, or a quarter, the larger
+PULLBACK_MIN_PP = 2.0         # a retreat is told once a third of the peak gain is given back, and at least this
+ENTRY_MOVE = 0.001            # an entry price moved by this share - margin averaged in - is a new position's gains
+ENGAGE_S = 600                # an acknowledged alarm or «Я в деле»: no call about that position for this long
+LAST_LINE_PCT = 1.0           # while he works: one alarm at this distance, or the third stage where it is lower ...
+LAST_QUIET_S = 180            # ... where no margin has been seen added for this long
+TOPUP_REL = 0.002             # a liquidation price moved away by this share of itself is margin added
+LIVE_EDIT_S = 10              # a live card is edited at most this often
+TREND_S, HIST_S = 300, 900    # the trend shown is over five minutes; fifteen are kept
 ALARM_RETRY_S, ALARM_EXPIRE_S = 30, 3600       # Pushover's emergency priority: its minimum retry, an hour
 TEST_EXPIRE_S, TEST_WAIT_S, RECEIPT_EVERY_S = 900, 900, 10
 PUSH_PER_HOUR = 20
@@ -67,18 +86,24 @@ OUTBOX_MAX = 100             # Telegram messages beyond this, oldest first, are 
 TG_PER_PASS = 5              # Telegram messages sent in one pass; the rest wait for the next
 COOLDOWN_S = 15              # a host that failed at the network is not tried again for this long
 HEARTBEAT_UTC = (19, 0)       # 23:00 in Batumi
+LOCAL = dt.timezone(dt.timedelta(hours=4))     # Batumi: UTC+4, no daylight saving
 FIND_CHAT_S = 1800
-PROVE_GATES = ("G-CRED", "G-TIME", "G-KEY", "G-POS", "G-BRACKET", "G-PUSH", "G-TG", "G-SEE", "G-ALARM", "G-HC")
-SEE_WAIT_S = 900             # the Boss's answer to what the guard sees, at prove
+PROVE_GATES = ("G-CRED", "G-TIME", "G-KEY", "G-POS", "G-BRACKET", "G-PUSH", "G-TG", "G-SEE", "G-LOOK", "G-ALARM",
+               "G-HC")
+SEE_WAIT_S = 900             # each of the Boss's answers at prove
 LONG_POLL_S = 25             # Telegram's long poll in find-chat and prove; their sockets wait 40 s
 YES, NO = ("да", "yes", "совпадает"), ("нет", "no", "не совпадает")
 READ_PERMS = ("enableReading", "enableFixReadOnly")
 CORE_PERMS = ("enableReading", "ipRestrict", "enableWithdrawals", "enableFutures", "enableSpotAndMarginTrading")
+SOUND = {"liq1": "spacealarm", "liq2": "siren", "liq3": "persistent", "record": "cashregister", "pullback": "falling",
+         "blind": "mechanical", "test": "siren", "sample": "pushover"}
+BINANCE_URL = "https://www.binance.com/ru/futures/%s"
+DOT = {"LONG": "🟢", "SHORT": "🔴"}
+STAGE = {1: ("⚠️", "Ликвидация близко"), 2: ("🚨", "Тревога"), 3: ("🆘", "Последний рубеж")}
 LABEL = {"binance-key": "ключ Binance", "binance-secret": "секрет Binance", "pushover-user": "User Key Pushover",
-         "pushover-token": "токен Pushover", "tg-token": "токен бота", "hc-url": "адрес пинга"}
-LEVEL_NAME = {1: "предупреждение", 2: "тревога", 3: "последний звонок"}
-SIDE_RU = {"LONG": "лонг", "SHORT": "шорт"}
-KEYBOARD = {"keyboard": [[{"text": "Статус"}, {"text": "Тест"}], [{"text": "Пороги"}, {"text": "Помощь"}]],
+         "pushover-token": "токен Pushover", "tg-token": "токен бота", "hc-url": "адрес пинга",
+         "pushover-long": "токен «Сторож LONG»", "pushover-short": "токен «Сторож SHORT»"}
+KEYBOARD = {"keyboard": [[{"text": "Статус"}, {"text": "Тест"}], [{"text": "Настройки"}, {"text": "Помощь"}]],
             "resize_keyboard": True, "is_persistent": True}
 IPV4 = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
 CREDENTIALS = (   # name, form, required, the Boss's prompt
@@ -94,6 +119,10 @@ CREDENTIALS = (   # name, form, required, the Boss's prompt
      "Telegram — токен бота «Сторож» от BotFather (ввод скрыт): "),
     ("hc-url", r"https://hc-ping\.com/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", False,
      "healthchecks.io — адрес пинга (https://hc-ping.com/…), или просто Enter — без него (ввод скрыт): "),
+    ("pushover-long", r"[A-Za-z0-9]{30}", False,
+     "Pushover — API Token приложения «Сторож LONG» (зелёная иконка), или Enter — без него (ввод скрыт): "),
+    ("pushover-short", r"[A-Za-z0-9]{30}", False,
+     "Pushover — API Token приложения «Сторож SHORT» (красная иконка), или Enter — без него (ввод скрыт): "),
 )
 FORM = {n: re.compile(f) for n, f, _r, _p in CREDENTIALS}
 FORM["tg-chat"] = re.compile(r"-?[0-9]{1,20}")
@@ -346,9 +375,15 @@ class Pushover:
     def validate(self):
         return self._post("/1/users/validate.json", {"token": self.token, "user": self.user})
 
-    def send(self, title, message, priority, expire=ALARM_EXPIRE_S):
+    def send(self, title, message, priority, expire=ALARM_EXPIRE_S, sound=None, url=None, url_title=None, html=True):
         fields = {"token": self.token, "user": self.user, "title": title[:250], "message": message[:1024],
                   "priority": priority}
+        if html:
+            fields["html"] = 1
+        if sound:
+            fields["sound"] = sound
+        if url:
+            fields.update(url=url[:512], url_title=(url_title or url)[:100])
         if priority == 2:
             fields.update(retry=ALARM_RETRY_S, expire=expire, tags="liq-guard")
         return self._post("/1/messages.json", fields).get("receipt")
@@ -378,9 +413,27 @@ class Telegram:
             raise Refused(TG, status, doc.get("description") if isinstance(doc, dict) else "%d bytes" % len(data))
         return doc["result"]
 
-    def send(self, chat, text, quiet=False):
-        return self.call("sendMessage", chat_id=int(chat), text=text[:4000], disable_notification=bool(quiet),
-                         reply_markup=KEYBOARD)
+    def send(self, chat, text, quiet=False, buttons=None):
+        """A message in HTML; with `buttons`, an inline keyboard of them, else the chat's own keyboard."""
+        return self.call("sendMessage", chat_id=int(chat), text=text[:4000], parse_mode="HTML",
+                         disable_notification=bool(quiet), link_preview_options={"is_disabled": True},
+                         reply_markup={"inline_keyboard": buttons} if buttons else KEYBOARD)
+
+    def edit(self, chat, message_id, text, buttons=None):
+        """A message of the bot's edited in place - no notification; a text unchanged is no fault."""
+        params = dict(chat_id=int(chat), message_id=int(message_id), text=text[:4000], parse_mode="HTML",
+                      link_preview_options={"is_disabled": True})
+        if buttons:
+            params["reply_markup"] = {"inline_keyboard": buttons}
+        try:
+            return self.call("editMessageText", **params)
+        except Refused as e:
+            if "not modified" in str(e.words):
+                return None
+            raise
+
+    def answer(self, callback_id, text):
+        return self.call("answerCallbackQuery", callback_query_id=str(callback_id), text=text[:200])
 
 
 def hc_ping(net, url):
@@ -417,7 +470,8 @@ def num(x):
 
 def parse_positions(doc):
     """The open positions of positionRisk's reply, v3 or v2: symbol, side, quantity, mark, liquidation price,
-    notional, isolated or not. Pure."""
+    notional, isolated or not; the entry price, the unrealized profit and the leverage - v2's own field, or v3's
+    notional over its position's initial margin. Pure."""
     assert isinstance(doc, list), "positionRisk: not a list"
     found = []
     for e in doc:
@@ -429,10 +483,15 @@ def parse_positions(doc):
         side = ps if ps in ("LONG", "SHORT") else ("LONG" if amt > 0 else "SHORT")
         mark = num(e.get("markPrice"))
         notional = num(e.get("notional"))
+        notional = abs(notional) if notional is not None else abs(amt) * (mark or 0.0)
+        entry, lev, pim = num(e.get("entryPrice")), num(e.get("leverage")), num(e.get("positionInitialMargin"))
+        if not lev and pim and pim > 0 and notional > 0:
+            lev = notional / pim
         found.append({"symbol": e["symbol"], "side": side, "key": "%s:%s" % (e["symbol"], side), "qty": abs(amt),
-                      "mark": mark, "liq": num(e.get("liquidationPrice")),
-                      "notional": abs(notional) if notional is not None else abs(amt) * (mark or 0.0),
-                      "isolated": (num(e.get("isolatedWallet")) or 0.0) > 0 or e.get("marginType") == "isolated"})
+                      "mark": mark, "liq": num(e.get("liquidationPrice")), "notional": notional,
+                      "isolated": (num(e.get("isolatedWallet")) or 0.0) > 0 or e.get("marginType") == "isolated",
+                      "entry": entry if entry and entry > 0 else None, "upnl": num(e.get("unRealizedProfit")),
+                      "lev": max(1, int(round(lev))) if lev and lev > 0 else None})
     return found
 
 
@@ -446,7 +505,7 @@ def distance_pct(p):
 
 
 def crossed(d, th):
-    """The highest level whose threshold `d` is at or under: 3, 2, 1, or 0. Pure."""
+    """The highest stage whose threshold `d` is at or under: 3, 2, 1, or 0. Pure."""
     for lvl, t in ((3, th[2]), (2, th[1]), (1, th[0])):
         if d <= t:
             return lvl
@@ -454,9 +513,9 @@ def crossed(d, th):
 
 
 def step(fired, d, th, rearm=REARM_PP):
-    """(the level to announce now, or 0; the levels announced in this descent after this read). A level re-arms once
-    `d` is above its threshold by `rearm` points; a read that crosses several levels at once announces the highest
-    alone and counts the lower ones announced; no liquidation price re-arms every level. Pure."""
+    """(the stage to announce now, or 0; the stages announced in this descent after this read). A stage re-arms once
+    `d` is above its threshold by `rearm` points; a read that crosses several stages at once announces the highest
+    alone and counts the lower ones announced; no liquidation price re-arms every stage. Pure."""
     if d is None:
         return 0, frozenset()
     left = {lvl for lvl in fired if not d > th[lvl - 1] + rearm}
@@ -489,6 +548,89 @@ def margin_hint(p, mmr, target=TARGET_PCT):
     return max(0.0, need)
 
 
+def target_price(p, target):
+    """The liquidation price `target` percent from the mark, on the side that loses. Pure."""
+    return p["mark"] * (1 + target / 100.0) if p["side"] == "SHORT" else p["mark"] * (1 - target / 100.0)
+
+
+def gain_pct(side, entry, price_):
+    """The gain from the entry price at `price_`, percent of the entry, on the position's side. Pure."""
+    return 100.0 * (price_ / entry - 1.0) if side == "LONG" else 100.0 * (1.0 - price_ / entry)
+
+
+def roe_pct(p):
+    """The unrealized profit over the position's initial margin at its entry, as Binance's app shows ROI; None where
+    a figure is missing. Pure."""
+    if p.get("upnl") is None or not p.get("entry") or not p.get("lev"):
+        return None
+    im = p["qty"] * p["entry"] / p["lev"]
+    return 100.0 * p["upnl"] / im if im > 0 else None
+
+
+def next_record(rec):
+    """The gain the next record is told at, after one told at `rec`. Pure."""
+    return max(rec + RECORD_STEP_PP, rec * RECORD_STEP_X)
+
+
+def profit_step(m, p, t, start):
+    """(the position's profit memory after this read, its events). The memory holds its side, the entry it was
+    counted from, its best price since and when, the last record told and the retreats told since. A record is told
+    once the gain reaches `start`, then each next_record above the last told; a retreat once the gain falls a third of
+    the peak, at least PULLBACK_MIN_PP, below it - stage 1 - and once to half the peak - stage 2 - each once a record,
+    the highest of a jump alone. An entry moved by ENTRY_MOVE, or a side changed, starts the memory again. `start` 0
+    tells nothing. Pure."""
+    e, mark = p.get("entry"), p.get("mark")
+    if not e or e <= 0 or not mark or mark <= 0:
+        return m, []
+    if m is None or m.get("side") != p["side"] or abs(m.get("entry", 0.0) - e) > ENTRY_MOVE * e:
+        m = {"side": p["side"], "entry": e, "best": mark, "best_t": t, "rec": None, "pb": 0}
+    else:
+        m = dict(m)
+    if (mark > m["best"]) if p["side"] == "LONG" else (mark < m["best"]):
+        m["best"], m["best_t"] = mark, t
+    if not start:
+        return m, []
+    g, gp = gain_pct(p["side"], e, mark), gain_pct(p["side"], e, m["best"])
+    if g >= (start if m["rec"] is None else next_record(m["rec"])) - 1e-9:
+        m["rec"], m["pb"] = g, 0
+        return m, [{"kind": "record", "gain": g, "next": next_record(g)}]
+    if m["rec"] is None or gp <= 0:
+        return m, []
+    first = gp - max(PULLBACK_MIN_PP, gp / 3.0)
+    stage = 2 if g <= min(gp / 2.0, first) else 1 if g <= first else 0
+    if stage > m["pb"]:
+        m["pb"] = stage
+        return m, [{"kind": "pullback", "stage": stage, "gain": g, "peak": gp, "given": 100.0 * (gp - g) / gp}]
+    return m, []
+
+
+def topup_seen(side, liq0, liq):
+    """True where the liquidation price moved away from where it was by TOPUP_REL of itself - margin added. Pure."""
+    if not liq0 or not liq or liq0 <= 0 or liq <= 0:
+        return False
+    return liq >= liq0 * (1 + TOPUP_REL) if side == "SHORT" else liq <= liq0 * (1 - TOPUP_REL)
+
+
+def last_line(th):
+    """The distance under which a call goes even while the Boss works. Pure."""
+    return min(LAST_LINE_PCT, th[2])
+
+
+def then_of(hist, t, i):
+    """(the value at index `i` about TREND_S before `t`, its age in whole minutes) from a position's history of
+    (instant, distance, gain), among samples at least 60 s old; None where there is none. Pure."""
+    old = [h for h in hist if t - h[0] >= 60 and h[i] is not None]
+    if not old:
+        return None
+    h = min(old, key=lambda h: abs(t - h[0] - TREND_S))
+    return h[i], max(1, int(round((t - h[0]) / 60.0)))
+
+
+def arrow(now, then, eps=0.05):
+    """The direction from `then` to `now`. Pure."""
+    return "↗" if now - then > eps else "↘" if now - then < -eps else "→"
+
+
 def key_reading(doc):
     """(read-only and bound to an address, the problems): the key's permissions as Binance reads them. Pure."""
     if not isinstance(doc, dict):
@@ -509,14 +651,22 @@ def perms_line(doc):
 
 
 def parse_command(text):
-    """(command, arguments) of a chat message: status, test, thresholds, help, or None. Pure."""
+    """(command, arguments) of a chat message, or (None, words). Pure."""
     words = (text or "").strip().lower().replace("ё", "е").split()
     if not words:
         return None, []
     w = words[0].lstrip("/").split("@")[0]
     names = {"статус": "status", "status": "status", "тест": "test", "test": "test", "пороги": "thresholds",
-             "thresholds": "thresholds", "помощь": "help", "help": "help", "start": "help"}
+             "thresholds": "thresholds", "помощь": "help", "help": "help", "start": "help", "настройки": "settings",
+             "settings": "settings", "цель": "target", "target": "target", "прибыль": "profit", "profit": "profit"}
     return names.get(w), words[1:]
+
+
+def number_of(word):
+    try:
+        return float(word.replace(",", "."))
+    except ValueError:
+        return None
 
 
 def thresholds_of(args):
@@ -524,18 +674,47 @@ def thresholds_of(args):
     Pure."""
     if len(args) != 3:
         return None
-    try:
-        w, a, c = (float(x.replace(",", ".")) for x in args)
-    except ValueError:
-        return None
-    if not (0 < c < a < w <= 30):
+    w, a, c = (number_of(x) for x in args)
+    if None in (w, a, c) or not (0 < c < a < w <= 30):
         return None
     return (round(w, 2), round(a, 2), round(c, 2))
 
 
+def target_of(args):
+    """The margin hint's target from `5`, or None: one number, 1 to 30. Pure."""
+    v = number_of(args[0]) if len(args) == 1 else None
+    return round(v, 2) if v is not None and 1 <= v <= 30 else None
+
+
+def settings_of(st):
+    """(thresholds, target, profit start) from a state.json's document, each its default where absent or not of its
+    form. Pure."""
+    th, tg, pf = st.get("thresholds"), st.get("target"), st.get("profit_from")
+    th = tuple(th) if isinstance(th, list) and thresholds_of([str(x) for x in th]) else DEFAULT_THRESHOLDS
+    tg = tg if isinstance(tg, (int, float)) and not isinstance(tg, bool) and target_of([str(tg)]) is not None \
+        else TARGET_PCT
+    pf = pf if isinstance(pf, (int, float)) and not isinstance(pf, bool) and profit_of([str(pf)]) is not None \
+        else PROFIT_FROM
+    return th, tg, pf
+
+
+def profit_of(args):
+    """The records' start from `7`, `0` or `выкл`, or None: 0 is off, else 3 to 100. Pure."""
+    if len(args) == 1 and args[0] in ("выкл", "off"):
+        return 0.0
+    v = number_of(args[0]) if len(args) == 1 else None
+    return round(v, 2) if v is not None and (v == 0 or 3 <= v <= 100) else None
+
+
+# ---- the texts: pure functions, HTML for Telegram and Pushover -----------------------------------------------------
+
+def esc(x):
+    return html.escape(str(x), quote=False)
+
+
 def ru(x, d):
     s = "{:,.{}f}".format(x, d)
-    return s.replace(",", " ").replace(".", ",")
+    return s.replace(",", " ").replace(".", ",").replace("-", "−")
 
 
 def price(x):
@@ -551,32 +730,245 @@ def pct(x):
     return "—" if x is None else ru(x, 1) + "%"
 
 
+def spct(x):
+    """A signed percent: +7,3% or −2,1%. Pure."""
+    return "—" if x is None else ("+" if x >= 0.05 else "") + ru(x, 1) + "%"
+
+
+def pct0(x):
+    """A setting's percent: 5% or 2,5%. Pure."""
+    return (ru(x, 0) if abs(x - round(x)) < 1e-9 else ru(x, 1)) + "%"
+
+
 def usdt(x):
     return ru(x, 0) + " USDT"
 
 
-def position_line(p, d, mmr, target=TARGET_PCT):
-    """One position for the Boss: its distance, prices and the margin hint. Pure."""
-    line = "%s %s: до ликвидации %s (цена %s → ликвидация %s)" % (
-        p["symbol"], SIDE_RU[p["side"]], pct(d), price(p["mark"]), price(p["liq"]))
-    if d is None:
-        return line
+def money(x):
+    """A signed sum: +1 240 USDT or −162 USDT. Pure."""
+    return ("+" if x >= 0.5 else "") + ru(x, 0) + " USDT"
+
+
+def coin(symbol):
+    for q in ("USDT", "USDC", "BUSD"):
+        if symbol.endswith(q) and len(symbol) > len(q):
+            return symbol[:-len(q)]
+    return symbol
+
+
+def hm(t):
+    """An instant as Batumi's clock reads it. Pure."""
+    return dt.datetime.fromtimestamp(t, LOCAL).strftime("%H:%M")
+
+
+def head(p):
+    """A card's first line: the side's colour, the coin, the side and the leverage. Pure."""
+    return "%s <b>%s · %s%s</b>" % (DOT[p["side"]], esc(coin(p["symbol"])), p["side"],
+                                    " ×%d" % p["lev"] if p.get("lev") else "")
+
+
+def pre(rows):
+    """Aligned label-value rows in a monospace block. Pure."""
+    w = max(len(k) for k, _v in rows) + 2
+    return "<pre>" + "\n".join(esc(k.ljust(w) + v) for k, v in rows) + "</pre>"
+
+
+def link_row(p):
+    return [{"text": "📲 Открыть %s в Binance" % coin(p["symbol"]), "url": BINANCE_URL % p["symbol"]}]
+
+
+def hint(p, mmr, target):
+    """(USDT to add, rounded up, approximate or not), or None where the liquidation price is at the target or beyond
+    it. Pure."""
+    if distance_pct(p) is None:
+        return None
     need = margin_hint(p, mmr or 0.0, target)
-    if need > 0:
-        line += "; долить %s%s, чтобы ликвидация ушла на %s%s" % (
-            "≈ " if mmr is None or not p["isolated"] else "", usdt(need), ru(target, 0) + "%",
-            "" if p["isolated"] else " (кросс-маржа — оценка)")
-    return line
+    if need <= 0:
+        return None
+    return float(math.ceil(need)), mmr is None or not p["isolated"]
 
 
-def alarm_text(items, mmrs, target=TARGET_PCT):
-    """(title, message) of one alarm: items are (level, position, distance), the highest level first. Pure."""
-    items = sorted(items, key=lambda i: (-i[0], i[2] if i[2] is not None else -1e9))
-    lvl, p, d = items[0]
-    title = "Сторож: %s — %s %s, до ликвидации %s" % (
-        LEVEL_NAME[lvl].upper() if lvl == 3 else LEVEL_NAME[lvl], p["symbol"], SIDE_RU[p["side"]], pct(d))
-    body = "\n".join(position_line(q, e, mmrs.get(q["symbol"]), target) for _l, q, e in items)
-    return title, body
+def hint_html(p, mmr, target):
+    h = hint(p, mmr, target)
+    if h is None:
+        return None
+    s = "➕ Добавь <b>%s%s</b> маржи → ликвидация уйдёт на <b>%s</b> от цены (%s)" % (
+        "≈ " if h[1] else "", usdt(h[0]), pct0(target), price(target_price(p, target)))
+    return s + (" · кросс-маржа — оценка" if not p["isolated"] else "")
+
+
+def liq_card(p, mmr, target, th, lvl, state, trend=None, until=None):
+    """(text, buttons) of a position's liquidation card. `state`: "ring" - its stage's call is out; "engaged" - he is at
+    work, its calls silent until `until`; "added" - margin added and the danger over; "eased" - the danger over by
+    itself; "closed" - the position closed. `trend` is (distance then, minutes ago) or None. Pure."""
+    d = distance_pct(p)
+    em, name = STAGE[lvl]
+    lines = [head(p), "%s <b>%s — ступень %d из 3</b>" % (em, name, lvl), ""]
+    tr = ""
+    if trend is not None and d is not None:
+        tr = " %s <i>%d мин назад %s</i>" % (arrow(d, trend[0]), trend[1], pct(trend[0]))
+    lines.append("До ликвидации <b>%s</b>%s" % (pct(d), tr))
+    rows = [("Цена", price(p["mark"])), ("Ликвидация", price(p["liq"]))]
+    if p.get("entry"):
+        rows.append(("Вход", price(p["entry"])))
+    if p.get("upnl") is not None:
+        rows.append(("PnL", money(p["upnl"])))
+    lines.append(pre(rows))
+    h = hint_html(p, mmr, target) if state in ("ring", "engaged") else None
+    if h:
+        lines.append("<blockquote>%s</blockquote>" % h)
+    c = esc(coin(p["symbol"]))
+    if state == "ring" and lvl == 1:
+        lines.append("🔔 Следующая ступень — %s до ликвидации: звонок, пока не подтвердишь." % pct0(th[1]))
+    elif state == "ring":
+        lines.append("🔔 Звонит Pushover. «Подтвердить» или «✋ Я в деле» — и звонки по %s затихнут на %d мин." % (
+            c, ENGAGE_S // 60))
+    elif state == "engaged":
+        lines.append("🔕 <b>Ты в деле</b> — звонки по %s молчат до %s. Карточка обновляется сама." % (c, hm(until)))
+    elif state == "added":
+        lines.append("✅ <b>Маржа добавлена</b> — до ликвидации %s." % pct(d))
+    elif state == "eased":
+        lines.append("✅ Опасность миновала — до ликвидации %s." % pct(d))
+    else:
+        lines.append("Позиция закрыта.")
+    buttons = None if state == "closed" else [link_row(p)]
+    if state == "ring":
+        buttons.append([{"text": "✋ Я в деле — тише %d мин" % (ENGAGE_S // 60), "callback_data": "eng:" + p["key"]}])
+    return "\n".join(lines), buttons
+
+
+def liq_push(p, mmr, target, lvl, kind="stage"):
+    """(title, message) of a position's liquidation call: `kind` "stage", "timeout" or "last". Pure."""
+    d = distance_pct(p)
+    em = STAGE[lvl][0]
+    c = coin(p["symbol"])
+    if kind == "timeout":
+        title = "%s %s %s · ⏰ до ликвидации всё ещё %s" % (DOT[p["side"]], c, p["side"], pct(d))
+        first = "%d мин после «Подтвердить» — маржа не добавлена" % (ENGAGE_S // 60)
+    elif kind == "last":
+        title = "%s %s %s · 🆘 до ликвидации %s" % (DOT[p["side"]], c, p["side"], pct(d))
+        first = "Маржа не добавлена %d мин — ликвидация совсем близко" % (LAST_QUIET_S // 60)
+    else:
+        title = "%s %s %s · %s до ликвидации %s" % (DOT[p["side"]], c, p["side"], em, pct(d))
+        first = "Ступень %d из 3 · цена %s → ликвидация %s" % (lvl, price(p["mark"]), price(p["liq"]))
+    lines = [first]
+    h = hint(p, mmr, target)
+    if h:
+        lines.append("Добавь <b>%s%s</b> → ликвидация на %s" % ("≈ " if h[1] else "", usdt(h[0]), pct0(target)))
+    if kind != "stage" or lvl >= 2:
+        lines.append("«Подтвердить» — звонки по %s затихнут на %d мин" % (c, ENGAGE_S // 60))
+    return title, "\n".join(lines)
+
+
+def record_card(p, ev, trend=None):
+    """(text, buttons) of a record: the gain from the entry, its PnL and ROE, and the next record. Pure."""
+    lines = [head(p), "💰 <b>Прибыль %s от входа — новый рекорд</b>" % spct(ev["gain"]), ""]
+    rows = [("Вход", price(p["entry"])), ("Цена", price(p["mark"]))]
+    if p.get("upnl") is not None:
+        rows.append(("PnL", money(p["upnl"])))
+    roe = roe_pct(p)
+    if roe is not None:
+        rows.append(("ROE", spct(roe)))
+    lines.append(pre(rows))
+    if trend is not None:
+        lines.append("Прибыль %s <i>%d мин назад %s</i>" % (arrow(ev["gain"], trend[0]), trend[1], spct(trend[0])))
+    lines.append("<blockquote>🎯 Следующий рекорд — на <b>%s</b>. Отдаст цена треть прибыли от пика — сообщу."
+                 "</blockquote>" % spct(ev["next"]))
+    return "\n".join(lines), [link_row(p)]
+
+
+def record_push(p, ev):
+    title = "%s %s %s · 💰 %s от входа" % (DOT[p["side"]], coin(p["symbol"]), p["side"], spct(ev["gain"]))
+    parts = ["Новый рекорд"]
+    if p.get("upnl") is not None:
+        parts.append("PnL <b>%s</b>" % money(p["upnl"]))
+    roe = roe_pct(p)
+    if roe is not None:
+        parts.append("ROE %s" % spct(roe))
+    return title, " · ".join(parts) + "\nСледующий — на %s · откат от пика тоже сообщу" % spct(ev["next"])
+
+
+def pullback_card(p, ev, m):
+    """(text, buttons) of a retreat from the record. Pure."""
+    if ev["stage"] == 1:
+        title = "↩️ <b>Откат от пика — отдано %d%% прибыли</b>" % round(ev["given"])
+        note = "Цена развернулась от рекорда. Уйдёт половина прибыли — сообщу ещё раз."
+    else:
+        title = "↩️ <b>%s</b>" % ("Прибыль ушла" if ev["gain"] <= 0 else "Ушла половина прибыли")
+        note = "По этому витку больше не напоминаю — до нового рекорда на %s." % spct(next_record(m["rec"]))
+    rows = [("Пик", "%s  %s" % (spct(ev["peak"]), hm(m["best_t"]))), ("Сейчас", spct(ev["gain"])),
+            ("Цена", price(p["mark"]))]
+    if p.get("upnl") is not None:
+        rows.append(("PnL", money(p["upnl"])))
+    return "\n".join([head(p), title, "", pre(rows), "<blockquote>%s</blockquote>" % note]), [link_row(p)]
+
+
+def pullback_push(p, ev, m):
+    c = "%s %s %s" % (DOT[p["side"]], coin(p["symbol"]), p["side"])
+    if ev["stage"] == 1:
+        title = "%s · ↩️ откат: отдано %d%%" % (c, round(ev["given"]))
+    else:
+        title = "%s · ↩️ %s" % (c, "прибыль ушла" if ev["gain"] <= 0 else "ушла половина прибыли")
+    text = "Пик %s в %s → сейчас <b>%s</b> от входа" % (spct(ev["peak"]), hm(m["best_t"]), spct(ev["gain"]))
+    if p.get("upnl") is not None:
+        text += "\nPnL %s" % money(p["upnl"])
+    return title, text
+
+
+def position_row(p, mmr, th, target, gain_then=None):
+    """One position's line in the status and the heartbeat. Pure."""
+    d = distance_pct(p)
+    g = gain_pct(p["side"], p["entry"], p["mark"]) if p.get("entry") and p.get("mark") else None
+    s = "%s <b>%s</b> %s%s" % (DOT[p["side"]], esc(coin(p["symbol"])), p["side"], " ×%d" % p["lev"] if p.get("lev") else "")
+    if g is not None:
+        s += " · <b>%s</b>%s" % (spct(g), " " + arrow(g, gain_then) if gain_then is not None else "")
+    s += " · ликв. <b>%s</b>" % pct(d)
+    if d is not None and d <= th[0]:
+        h = hint(p, mmr, target)
+        s += " ⚠️" + ("\n      ➕ добавь %s%s → ликв. на %s" % ("≈ " if h[1] else "", usdt(h[0]), pct0(target))
+                      if h else "")
+    return s
+
+
+def status_card(positions, mmrs, th, target, profit_from, now, last_ok, blind, key_ok, dead_man, thens=None):
+    """The status: one line a position, nearest the liquidation first; the settings and the guard's health folded
+    away. Pure."""
+    thens = thens or {}
+    state = "⚪ не видит Binance %d мин" % round((now - last_ok) / 60) if blind else "✅ на посту"
+    lines = ["🛡 <b>Сторож</b> · %s · %s" % (hm(now), state)]
+    if not positions:
+        lines.append("Открытых позиций нет.")
+    for p in sorted(positions, key=lambda q: (distance_pct(q) is None, distance_pct(q) or 0.0)):
+        lines.append(position_row(p, mmrs.get(p["symbol"]), th, target, thens.get(p["key"])))
+    lines.append("<blockquote expandable>⚙️ Ступени %s · %s · %s до ликвидации · цель маржи %s · прибыль от %s\n"
+                 "📡 Binance %d с назад · ключ только чтение %s · пульс %s</blockquote>" % (
+                     ru(th[0], 1), ru(th[1], 1), pct0(th[2]), pct0(target),
+                     ("+" + pct0(profit_from)) if profit_from else "выкл", max(0, round(now - last_ok)),
+                     "✓" if key_ok else "—", "✓" if dead_man else "нет"))
+    return "\n".join(lines)
+
+
+def settings_card(th, target, profit_from):
+    return ("⚙️ <b>Настройки сторожа</b>\n" + pre([
+        ("Ступени ликвидации", "%s · %s · %s" % (ru(th[0], 1), ru(th[1], 1), pct0(th[2]))),
+        ("Цель маржи", pct0(target)), ("Прибыль от", ("+" + pct0(profit_from)) if profit_from else "выкл")]) +
+        "\nИзменить: «Пороги 4 2,5 1,5» · «Цель 5» · «Прибыль 7» (0 — выключить)")
+
+
+def help_card(th, target, profit_from):
+    return ("🛡 <b>Сторож</b> смотрит твои фьючерсы Binance каждые 5 с — ключом «только чтение». Сам не торгует и "
+            "маржу не доливает.\n\n"
+            "🔻 <b>Ликвидация — три ступени</b>, расстояние до неё в %% от цены:\n"
+            "1️⃣ %s — громкое уведомление\n2️⃣ %s — звонок сквозь беззвучный режим, повторяется до «Подтвердить»\n"
+            "3️⃣ %s — последний звонок\nВ каждой — сколько маржи добавить, чтобы ликвидация ушла на %s.\n\n"
+            "🔕 <b>Нажал «Подтвердить» или «✋ Я в деле»</b> — по этой позиции %d мин никаких звонков, а карточка в "
+            "Telegram обновляется сама. Добавишь маржу — сторож увидит и напишет ✅. Одно исключение: до ликвидации "
+            "меньше %s и маржа не добавлена %d мин — один звонок.\n\n"
+            "💰 <b>Прибыль</b> — от %s от входа: каждый новый рекорд (+3 пункта, дальше +25%%), откат от пика на треть "
+            "и на половину прибыли.\n\n"
+            "🟢 лонг · 🔴 шорт — цвет в начале каждого сигнала.\nКнопки внизу: Статус · Тест · Настройки · Помощь." % (
+                pct0(th[0]), pct0(th[1]), pct0(th[2]), pct0(target), ENGAGE_S // 60, pct0(last_line(th)),
+                LAST_QUIET_S // 60, ("+" + pct0(profit_from)) if profit_from else "— выключено"))
 
 
 def private_starts(updates):
@@ -593,15 +985,6 @@ def private_starts(updates):
     return sorted(chats)
 
 
-HELP = ("Сторож следит за твоими фьючерсными позициями Binance каждые 5 секунд — по ключу «только чтение».\n"
-        "• Ближе первого порога до ликвидации — сообщение здесь; ближе второго — тревога Pushover (звучит сквозь "
-        "беззвучный режим и «Сон», повторяется каждые 30 с, пока не нажмёшь «Подтвердить»); ближе третьего — "
-        "второй звонок. В каждой тревоге — сколько долить, чтобы ликвидация ушла на 8% от цены.\n"
-        "• Потеряет Binance дольше 2 минут — тоже разбудит.\n"
-        "Команды: «Статус», «Тест» (проверить звонок перед сном), «Пороги», «Пороги 5 3 1,5» — задать свои, "
-        "в процентах от цены. Сторож никогда не торгует и не доливает маржу сам.")
-
-
 # ---- the guard: one cycle at a time, every effect through its stand-ins in the self-test ---------------------------
 
 class Guard:
@@ -611,15 +994,19 @@ class Guard:
         self.scrub = Scrub(creds)
         self.bn = Binance(self.net, creds["binance-key"], creds["binance-secret"], now)
         self.po = Pushover(self.net, creds["pushover-token"], creds["pushover-user"])
+        self.apps = {"main": self.po}
+        for side, name in (("LONG", "pushover-long"), ("SHORT", "pushover-short")):
+            self.apps[side] = Pushover(self.net, creds[name], creds["pushover-user"]) if creds.get(name) else self.po
         self.tg = Telegram(self.net, creds["tg-token"])
         self.chat, self.hc = int(creds["tg-chat"]), creds.get("hc-url")
         t = now()
         st = self.load_state()
-        th = st.get("thresholds")
-        self.th = tuple(th) if isinstance(th, list) and thresholds_of([str(x) for x in th]) else DEFAULT_THRESHOLDS
+        self.th, self.target, self.profit_from = settings_of(st)
+        self.mem = self.load_memory()
         self.tg_offset = st.get("tg_offset") if isinstance(st.get("tg_offset"), int) else 0
         self.hb_day = st.get("hb_day")
         self.fired, self.positions, self.mmr, self.outbox, self.pushes = {}, [], {}, [], []
+        self.watch, self.alarms, self.hist, self.held = {}, {}, {}, {}
         self.started, self.last_ok, self.polls_ok, self.polls_err, self.last_error = t, t, 0, 0, None
         self.blind, self.blind_next, self.key_ok, self.key_checked = False, 0.0, None, None
         self.next_time = self.next_key = self.next_hc = 0.0
@@ -638,21 +1025,36 @@ class Guard:
         except (OSError, ValueError):
             return {}
 
+    def load_memory(self):
+        try:
+            with open(os.path.join(self.var, "memory.json"), encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            return {}
+        keep = ("side", "entry", "best", "best_t", "rec", "pb")
+        return {k: v for k, v in doc.items() if isinstance(v, dict) and all(f in v for f in keep)} \
+            if isinstance(doc, dict) else {}
+
     def save_state(self):
         t = self.now()
-        doc = {"at": utc(t), "started": utc(self.started), "thresholds": list(self.th), "tg_offset": self.tg_offset,
-               "hb_day": self.hb_day, "last_ok": utc(self.last_ok), "polls_ok": self.polls_ok,
-               "polls_err": self.polls_err, "positions": len(self.positions),
+        doc = {"at": utc(t), "started": utc(self.started), "thresholds": list(self.th), "target": self.target,
+               "profit_from": self.profit_from, "tg_offset": self.tg_offset, "hb_day": self.hb_day,
+               "last_ok": utc(self.last_ok), "polls_ok": self.polls_ok, "polls_err": self.polls_err,
+               "positions": len(self.positions),
                "with_liquidation": sum(1 for p in self.positions if distance_pct(p) is not None),
+               "watched": len(self.watch), "engaged": sum(1 for w in self.watch.values() if w.get("until")),
+               "alarms_open": len(self.alarms), "side_apps": sum(1 for s in ("LONG", "SHORT")
+                                                                 if self.apps[s] is not self.po),
                "blind": self.blind, "last_error": self.last_error, "key_ok": self.key_ok,
                "key_checked": utc(self.key_checked) if self.key_checked else None, "dead_man": bool(self.hc),
                "outbox": len(self.outbox), "disk_faults": self.disk_faults, "pid": os.getpid()}
         self.next_state = t + STATE_S
-        try:
-            replace_private(os.path.join(self.var, "state.json"), (json.dumps(doc, sort_keys=True) + "\n").encode(),
-                            self.uid)
-        except OSError:
-            self.disk_faults += 1
+        for name, body in (("state.json", doc), ("memory.json", self.mem)):
+            try:
+                replace_private(os.path.join(self.var, name), (json.dumps(body, sort_keys=True) + "\n").encode(),
+                                self.uid)
+            except OSError:
+                self.disk_faults += 1
 
     def journal(self, ev, **fields):
         t = self.now()
@@ -678,39 +1080,58 @@ class Guard:
             self.journal("error", where=where, error=self.last_error)
 
     # -- sending -----------------------------------------------------------------------------------------------------
-    def say(self, text, quiet=False):
-        self.outbox.append({"to": "tg", "text": text, "quiet": quiet, "tries": 0})
+    def say(self, text, quiet=False, buttons=None, card=None):
+        """A Telegram message queued; `card` = (key, stage) makes it that position's live card once sent."""
+        m = {"to": "tg", "text": text, "quiet": quiet, "buttons": buttons, "card": card, "tries": 0}
+        self.outbox.append(m)
+        return m
 
-    def push(self, title, message, priority, expire=ALARM_EXPIRE_S):
+    def push(self, title, message, priority, expire=ALARM_EXPIRE_S, app="main", sound=None, url=None, key=None,
+             kind=None):
         t = self.now()
         self.pushes = [x for x in self.pushes if x > t - 3600]
         if len(self.pushes) >= PUSH_PER_HOUR:
             self.journal("push_capped", title=title)
-            self.say("Pushover: предел %d тревог в час достигнут — эта только здесь:\n%s\n%s" % (
+            self.say("⚠️ Pushover: предел %d сообщений в час — это только здесь:\n<b>%s</b>\n%s" % (
                 PUSH_PER_HOUR, title, message))
             return None
         self.pushes.append(t)
-        m = {"to": "push", "title": title, "text": message, "priority": priority, "expire": expire, "tries": 0}
+        m = {"to": "push", "title": title, "text": message, "priority": priority, "expire": expire, "app": app,
+             "sound": sound, "url": url, "key": key, "kind": kind, "tries": 0}
         self.outbox.append(m)
         return m
 
     def flush(self):
-        """Every waiting message tried once, in order; a channel that fails is not tried again in this pass."""
+        """Every waiting message tried once, in order; a channel that fails is not tried again in this pass. A call
+        about a position he is working on, queued before he engaged, is dropped - but the last line's and the
+        timeout's."""
         pending, self.outbox, failed, tg_sent = self.outbox, [], set(), 0
         for m in pending:
+            if m["to"] == "push" and m.get("key") and self.engaged(m["key"]) and m.get("kind") not in ("last", "timeout"):
+                self.journal("push_held", key=m["key"], kind=m.get("kind"))
+                continue
             if m["to"] in failed or (m["to"] == "tg" and tg_sent >= TG_PER_PASS):
                 self.outbox.append(m)
                 continue
             try:
                 if m["to"] == "tg":
                     tg_sent += 1
-                    self.tg.send(self.chat, m["text"], m["quiet"])
+                    r = self.tg.send(self.chat, m["text"], m["quiet"], m["buttons"])
+                    if m.get("card") and isinstance(r, dict) and m["card"][0] in self.watch:
+                        w = self.watch[m["card"][0]]
+                        w["card"], w["lvl"], w["t_edit"] = r.get("message_id"), m["card"][1], self.now()
                 else:
-                    r = self.po.send(m["title"], m["text"], m["priority"], m["expire"])
-                    self.journal("pushed", priority=m["priority"], title=m["title"], receipt=bool(r))
+                    t = self.now()
+                    r = self.apps[m["app"]].send(m["title"], m["text"], m["priority"], m["expire"], m["sound"],
+                                                 m["url"], ("Открыть %s в Binance" % coin(m["key"].split(":")[0]))
+                                                 if m.get("key") else None)
+                    self.journal("pushed", priority=m["priority"], kind=m.get("kind"), key=m.get("key"),
+                                 app=m["app"], receipt=bool(r))
                     if m.get("test") and r:
-                        self.test = {"receipt": r, "sent": self.now(), "next": self.now() + RECEIPT_EVERY_S,
-                                     "deadline": self.now() + TEST_WAIT_S}
+                        self.test = {"receipt": r, "sent": t, "next": t + RECEIPT_EVERY_S, "deadline": t + TEST_WAIT_S}
+                    elif r and m.get("key"):
+                        self.alarms[r] = {"key": m["key"], "app": m["app"], "sent": t, "next": t + RECEIPT_EVERY_S,
+                                          "until": t + m["expire"]}
             except Exception as e:
                 failed.add(m["to"])
                 m["tries"] += 1
@@ -720,7 +1141,7 @@ class Guard:
                 else:
                     self.journal("dropped", to=m["to"], tries=m["tries"])
                     if m["to"] == "push":
-                        self.say("Pushover не принял тревогу за %d попыток: %s\n%s" % (
+                        self.say("⚠️ Pushover не принял сообщение за %d попыток:\n<b>%s</b>\n%s" % (
                             OUTBOX_TRIES, m["title"], m["text"]))
         tg = [m for m in self.outbox if m["to"] == "tg"]
         if len(tg) > OUTBOX_MAX:
@@ -743,6 +1164,13 @@ class Guard:
         if not ok:
             raise KeyRefused(problems)
 
+    def engaged(self, key):
+        w = self.watch.get(key)
+        return bool(w and w.get("until"))
+
+    def any_engaged(self):
+        return any(w.get("until") for w in self.watch.values())
+
     def poll(self):
         t = self.now()
         if t < self.bn_backoff:
@@ -758,35 +1186,240 @@ class Guard:
                 if "-1021" in str(e.words):
                     self.next_time = 0.0
             return False
-        alarms, fired = [], {}
+        stages, fired, gains, mem = [], {}, [], {}
         for p in pos:
             d = distance_pct(p)
             lvl, fired[p["key"]] = step(self.fired.get(p["key"], frozenset()), d, self.th)
             if lvl:
-                alarms.append((lvl, p, d))
+                stages.append((lvl, p, d))
+            m, evs = profit_step(self.mem.get(p["key"]), p, t, self.profit_from)
+            if m is not None:
+                mem[p["key"]] = m
+            gains += [(ev, p, m) for ev in evs]
+            g = gain_pct(p["side"], p["entry"], p["mark"]) if p["entry"] and p["mark"] else None
+            self.hist[p["key"]] = [h for h in self.hist.get(p["key"], []) if t - h[0] <= HIST_S] + [(t, d, g)]
         self.positions = pos
-        if alarms:
-            self.refresh_brackets([p["symbol"] for _l, p, _d in alarms])
-            self.announce(alarms)
-        self.fired = fired          # committed once the alarms are queued: a fault before this rings them again
-        for lvl, p, d in alarms:
-            self.journal("level", key=p["key"], level=lvl, distance=d, mark=p["mark"], liq=p["liq"])
+        if stages:
+            self.refresh_brackets([p["symbol"] for _l, p, _d in stages])
+            for lvl, p, d in stages:
+                self.announce(lvl, p)
+        for ev, p, m in gains:
+            self.tell(ev, p, m)
+        self.fired, self.mem = fired, mem       # committed once the calls are queued: a fault before rings them again
+        self.hist = {k: v for k, v in self.hist.items() if k in fired}
+        for lvl, p, d in stages:
+            self.journal("level", key=p["key"], level=lvl, distance=d, mark=p["mark"], liq=p["liq"],
+                         engaged=self.engaged(p["key"]))
+        for ev, p, _m in gains:
+            self.journal(ev["kind"], key=p["key"], gain=ev["gain"], stage=ev.get("stage"), mark=p["mark"])
         self.polls_ok += 1
         if self.blind:
             self.blind = False
-            self.say("Сторож снова видит Binance: слеп был %d мин." % round((t - self.last_ok) / 60))
+            self.say("✅ Сторож снова видит Binance — слеп был %d мин." % round((t - self.last_ok) / 60), quiet=True)
             self.journal("seen_again", blind_s=round(t - self.last_ok))
         self.last_ok = t
         ds = [d for d in (distance_pct(p) for p in pos) if d is not None]
         self.min_seen = min(ds) if ds else None
+        if gains:
+            self.next_state = 0.0
         return True
 
-    def announce(self, alarms):
-        top = max(lvl for lvl, _p, _d in alarms)
-        title, body = alarm_text(alarms, self.mmr)
-        if top >= 2:
-            self.push(title, body + "\nПодтверди в Pushover, чтобы звонок затих.", 2)
-        self.say(("🔴 " if top >= 2 else "⚠️ ") + title + "\n" + body, quiet=False)
+    def trend(self, key, i):
+        return then_of(self.hist.get(key, []), self.now(), i)
+
+    def announce(self, lvl, p):
+        """A stage reached: the live card, and the call - unless he is working on this position, when the card alone
+        changes."""
+        t = self.now()
+        w = self.watch.get(p["key"])
+        if w is None:
+            w = self.watch[p["key"]] = {"card": None, "lvl": lvl, "t_edit": t, "liq0": p["liq"], "added": 0,
+                                        "added_t": None, "since": None, "until": None, "last": False}
+        if w["until"]:
+            w["lvl"] = max(w["lvl"], lvl)
+            self.edit_card(p["key"], force=True)
+            return
+        mmr = self.mmr.get(p["symbol"])
+        title, text = liq_push(p, mmr, self.target, lvl)
+        self.push(title, text, 2 if lvl >= 2 else 1, app=p["side"], sound=SOUND["liq%d" % lvl],
+                  url=BINANCE_URL % p["symbol"], key=p["key"], kind="liq%d" % lvl)
+        body, buttons = liq_card(p, mmr, self.target, self.th, lvl, "ring", self.trend(p["key"], 1))
+        self.say(body, buttons=buttons, card=(p["key"], lvl))
+
+    def tell(self, ev, p, m):
+        """A record or a retreat: held while he works on any position, else its card and its notice."""
+        if self.any_engaged():
+            self.held[p["key"]] = ev["kind"]
+            return
+        if ev["kind"] == "record":
+            body, buttons = record_card(p, ev, self.trend(p["key"], 2))
+            title, text = record_push(p, ev)
+        else:
+            body, buttons = pullback_card(p, ev, m)
+            title, text = pullback_push(p, ev, m)
+        self.push(title, text, 1, app=p["side"], sound=SOUND[ev["kind"]], url=BINANCE_URL % p["symbol"],
+                  key=p["key"], kind=ev["kind"])
+        self.say(body, buttons=buttons)
+
+    def engage(self, key, via):
+        """He is at work on `key`: no call about it for ENGAGE_S, its other calls stopped, its card says so."""
+        t = self.now()
+        w = self.watch.get(key)
+        if w is None or not any(p["key"] == key for p in self.positions):
+            return False
+        first = not w["until"]
+        w["until"] = t + ENGAGE_S
+        if first:
+            w["since"], w["last"] = t, False
+        for r, a in list(self.alarms.items()):
+            if a["key"] == key:
+                try:
+                    self.apps[a["app"]].cancel(r)
+                except Exception as e:
+                    self.err("cancel", e)
+                del self.alarms[r]
+        self.journal("engaged", key=key, via=via, first=first)
+        self.edit_card(key, force=True)
+        return True
+
+    def edit_card(self, key, state=None, force=False):
+        """The position's live card edited to the present, at most every LIVE_EDIT_S unless forced; an edit Telegram
+        refuses is tried at the next."""
+        t = self.now()
+        w = self.watch.get(key)
+        p = next((q for q in self.positions if q["key"] == key), None)
+        if w is None or w["card"] is None or (not force and t - w["t_edit"] < LIVE_EDIT_S):
+            return
+        if p is None:
+            state = "closed"
+            p = {"symbol": key.split(":")[0], "side": key.split(":")[1], "key": key, "mark": None, "liq": None}
+        d = distance_pct(p) if state != "closed" else None
+        lvl = max(w["lvl"], crossed(d, self.th)) if d is not None else w["lvl"]
+        state = state or ("engaged" if w["until"] else "ring")
+        try:
+            if state == "closed":
+                self.tg.edit(self.chat, w["card"], "\n".join([
+                    "%s <b>%s · %s</b>" % (DOT[p["side"]], esc(coin(p["symbol"])), p["side"]), "Позиция закрыта."]))
+            else:
+                body, buttons = liq_card(p, self.mmr.get(p["symbol"]), self.target, self.th, lvl, state,
+                                         self.trend(key, 1), w["until"])
+                self.tg.edit(self.chat, w["card"], body, buttons)
+            w["t_edit"] = t
+        except Exception as e:
+            self.err("edit", e)
+
+    def end_engaged(self, key, why, p=None):
+        """His work on `key` over: `why` "added", "eased", "closed" or "timeout". A timeout with the danger still
+        there calls him again; what was held while he worked is told, quietly."""
+        w = self.watch[key]
+        w["until"], w["since"] = None, None
+        self.journal("engaged_end", key=key, why=why)
+        if why == "timeout" and p is not None:
+            d = distance_pct(p)
+            mmr = self.mmr.get(p["symbol"])
+            if d is not None and d <= self.th[1]:
+                title, text = liq_push(p, mmr, self.target, max(2, crossed(d, self.th)), "timeout")
+                self.push(title, text, 2, app=p["side"], sound=SOUND["liq2"], url=BINANCE_URL % p["symbol"],
+                          key=key, kind="timeout")
+            elif d is not None and d <= self.th[0]:
+                title, text = liq_push(p, mmr, self.target, 1, "timeout")
+                self.push(title, text, 1, app=p["side"], sound=SOUND["liq1"], url=BINANCE_URL % p["symbol"],
+                          key=key, kind="timeout")
+            self.edit_card(key, force=True)
+        if not self.any_engaged() and self.held:
+            held, self.held = self.held, {}
+            for k, kind in sorted(held.items()):
+                q = next((x for x in self.positions if x["key"] == k), None)
+                m = self.mem.get(k)
+                if q is None or m is None or not q["entry"]:
+                    continue
+                g = gain_pct(q["side"], q["entry"], q["mark"])
+                self.say("%s\n📊 Пока ты был в деле: %s. Сейчас <b>%s</b> от входа, пик %s в %s." % (
+                    head(q), "новый рекорд" if kind == "record" else "откат от пика", spct(g),
+                    spct(gain_pct(q["side"], q["entry"], m["best"])), hm(m["best_t"])), quiet=True,
+                    buttons=[link_row(q)])
+
+    def tend(self):
+        """Every watched position, each pass: margin added seen, his work's end or its last line, the danger's end,
+        the card kept live."""
+        t = self.now()
+        here = {p["key"]: p for p in self.positions}
+        for key, w in list(self.watch.items()):
+            p = here.get(key)
+            if p is None:
+                self.edit_card(key, "closed", force=True)
+                self.cancel_alarms(key)
+                if w["until"]:
+                    self.end_engaged(key, "closed")
+                del self.watch[key]
+                continue
+            d = distance_pct(p)
+            if w["liq0"] and p["liq"] and p["liq"] > 0 and not topup_seen(p["side"], w["liq0"], p["liq"]):
+                w["liq0"] = min(w["liq0"], p["liq"]) if p["side"] == "SHORT" else max(w["liq0"], p["liq"])
+            if topup_seen(p["side"], w["liq0"], p["liq"]):
+                w["liq0"], w["added"], w["added_t"] = p["liq"], w["added"] + 1, t
+                self.journal("margin_added", key=key, distance=d)
+                if w["until"]:
+                    w["until"] = t + ENGAGE_S
+            if w["until"]:
+                if d is None or (w["added"] and d > self.th[0]) or d > self.th[0] + REARM_PP:
+                    why = "added" if w["added"] else "eased"
+                    self.end_engaged(key, why)
+                    self.finish(key, w, p, d, why)
+                    continue
+                if d <= last_line(self.th) and not w["last"] and t - (w["added_t"] or w["since"]) >= LAST_QUIET_S:
+                    w["last"] = True
+                    title, text = liq_push(p, self.mmr.get(p["symbol"]), self.target, 3, "last")
+                    self.push(title, text, 2, app=p["side"], sound=SOUND["liq3"], url=BINANCE_URL % p["symbol"],
+                              key=key, kind="last")
+                if t >= w["until"]:
+                    self.end_engaged(key, "timeout", p)
+                    continue
+            elif d is None or d > self.th[0] + REARM_PP:
+                self.finish(key, w, p, d, "added" if w["added"] else "eased")
+                continue
+            elif d > self.th[1] + REARM_PP:
+                self.cancel_alarms(key)
+            self.edit_card(key)
+
+    def finish(self, key, w, p, d, why):
+        """The danger over: the card's last edit, its calls stopped, and a quiet word where margin was added."""
+        self.edit_card(key, why, force=True)
+        self.cancel_alarms(key)
+        if why == "added" and d is not None:
+            self.say("✅ %s · ликвидация отодвинута: до неё <b>%s</b>." % (head(p), pct(d)), quiet=True)
+        del self.watch[key]
+
+    def cancel_alarms(self, key):
+        for r, a in list(self.alarms.items()):
+            if a["key"] == key:
+                try:
+                    self.apps[a["app"]].cancel(r)
+                except Exception as e:
+                    self.err("cancel", e)
+                del self.alarms[r]
+
+    def check_alarms(self):
+        """Each open call's receipt read every RECEIPT_EVERY_S: acknowledged - he is at work on its position."""
+        t = self.now()
+        for r, a in list(self.alarms.items()):
+            if t < a["next"]:
+                continue
+            if t > a["until"]:
+                del self.alarms[r]
+                continue
+            a["next"] = t + RECEIPT_EVERY_S
+            try:
+                doc = self.apps[a["app"]].receipt(r)
+            except Exception as e:
+                self.err("receipt", e)
+                continue
+            if doc.get("acknowledged") == 1:
+                del self.alarms[r]
+                self.journal("acknowledged", key=a["key"], after_s=round(t - a["sent"]))
+                self.engage(a["key"], "pushover")
+            elif doc.get("expired") == 1:
+                del self.alarms[r]
 
     def check_blind(self):
         t = self.now()
@@ -794,10 +1427,11 @@ class Guard:
             first = not self.blind
             self.blind, self.blind_next = True, t + BLIND_REPEAT_S
             why = self.bn_error or "нет ответа"
-            text = "Сторож не видит Binance %d мин: %s. Твои позиции сейчас без присмотра." % (
-                round((t - self.last_ok) / 60), why)
-            self.push("Сторож ослеп" if first else "Сторож всё ещё слеп", text, 1)
-            self.say("🔴 " + text)
+            mins = round((t - self.last_ok) / 60)
+            self.push("⚪ Сторож не видит Binance · %d мин" % mins, "Позиции без присмотра. %s" % esc(why), 1,
+                      sound=SOUND["blind"])
+            self.say("⚪ <b>Сторож не видит Binance %d мин</b>\nПозиции без присмотра. Причина: <code>%s</code>\n"
+                     "%s" % (mins, esc(why), "Напомню через 30 мин, если не пройдёт." if first else "Всё ещё слеп."))
             self.journal("blind", since=utc(self.last_ok), error=why)
 
     def refresh_brackets(self, first=()):
@@ -822,13 +1456,18 @@ class Guard:
 
     def telegram(self):
         try:
-            ups = self.tg.call("getUpdates", offset=self.tg_offset, timeout=0, allowed_updates=["message"])
+            ups = self.tg.call("getUpdates", offset=self.tg_offset, timeout=0,
+                               allowed_updates=["message", "callback_query"])
         except Exception as e:
             self.err("telegram", e)
             return
         for u in ups:
             if isinstance(u.get("update_id"), int):
                 self.tg_offset = max(self.tg_offset, u["update_id"] + 1)
+            cq = u.get("callback_query")
+            if isinstance(cq, dict):
+                self.callback(cq)
+                continue
             m = u.get("message") or {}
             if (m.get("chat") or {}).get("id") != self.chat:
                 self.journal("foreign_chat")
@@ -837,48 +1476,63 @@ class Guard:
             self.journal("command", cmd=cmd or "none")
             self.command(cmd, args)
 
+    def callback(self, cq):
+        """A button of a card pressed: «Я в деле» from his chat alone."""
+        data = cq.get("data") or ""
+        mine = (cq.get("from") or {}).get("id") == self.chat and \
+            ((cq.get("message") or {}).get("chat") or {}).get("id") == self.chat
+        if not mine:
+            self.journal("foreign_chat")
+            return
+        ok = data.startswith("eng:") and self.engage(data[4:], "telegram")
+        self.journal("command", cmd="engage" if ok else "button")
+        try:
+            self.tg.answer(cq.get("id"), ("🔕 Звонки по %s молчат %d мин" % (coin(data[4:].split(":")[0]),
+                                                                          ENGAGE_S // 60)) if ok
+                           else "Эта позиция уже вне опасности")
+        except Exception as e:
+            self.err("answer", e)
+
     def command(self, cmd, args):
         if cmd == "status":
-            self.say(self.status_text())
+            thens = {p["key"]: (self.trend(p["key"], 2) or (None,))[0] for p in self.positions}
+            self.say(status_card(self.positions, self.mmr, self.th, self.target, self.profit_from, self.now(),
+                                 self.last_ok, self.blind, self.key_ok, bool(self.hc), thens))
         elif cmd == "test":
             if self.test:
-                self.say("Тест уже идёт — подтверди тревогу в Pushover.")
+                self.say("🔔 Тест уже идёт — подтверди звонок в Pushover.")
                 return
-            m = self.push("Сторож: проверка тревоги",
-                          "Это тест. Нажми «Подтвердить» — и сторож напишет, что звонок дошёл.", 2, TEST_EXPIRE_S)
+            m = self.push("🛡 Сторож · проверка звонка", "Это тест. Нажми «Подтвердить» — в Telegram придёт ✅.", 2,
+                          TEST_EXPIRE_S, sound=SOUND["test"])
             if m is not None:
                 m["test"] = True
-                self.say("Тестовая тревога отправлена в Pushover. Подтверди её на телефоне.")
-        elif cmd == "thresholds":
-            if not args:
-                self.say("Пороги: %s / %s / %s до ликвидации (сообщение / тревога / последний звонок). "
-                         "Задать свои: «Пороги 5 3 1,5»." % tuple(pct(x) for x in self.th))
+                self.say("🔔 Тестовый звонок отправлен — подтверди его в Pushover.")
+        elif cmd in ("thresholds", "settings", "target", "profit") and not args:
+            self.say(settings_card(self.th, self.target, self.profit_from))
+        elif cmd in ("thresholds", "target", "profit"):
+            v = {"thresholds": thresholds_of, "target": target_of, "profit": profit_of}[cmd](args)
+            if v is None:
+                self.say({"thresholds": "Не понял. Нужно три числа по убыванию, не больше 30: «Пороги 4 2,5 1,5».",
+                          "target": "Не понял. Нужно одно число от 1 до 30: «Цель 5».",
+                          "profit": "Не понял. Нужно одно число от 3 до 100, или 0 — выключить: «Прибыль 7»."}[cmd])
                 return
-            th = thresholds_of(args)
-            if th is None:
-                self.say("Не понял. Нужно три числа по убыванию, не больше 30: «Пороги 5 3 1,5».")
-                return
-            self.th = th
-            self.fired = {p["key"]: frozenset(range(1, crossed(distance_pct(p), th) + 1))
-                          for p in self.positions if distance_pct(p) is not None}
-            self.journal("thresholds", th=list(th))
+            if cmd == "thresholds":
+                self.th = v
+                self.fired = {p["key"]: frozenset(range(1, crossed(distance_pct(p), v) + 1))
+                              for p in self.positions if distance_pct(p) is not None}
+            elif cmd == "target":
+                self.target = v
+            else:
+                self.profit_from = v
+            self.journal(cmd, value=list(v) if cmd == "thresholds" else v)
             self.save_state()
-            self.say("Пороги заданы: %s / %s / %s." % tuple(pct(x) for x in th))
+            self.say("✅ Задано.\n" + settings_card(self.th, self.target, self.profit_from))
+        elif cmd == "settings":
+            self.say(settings_card(self.th, self.target, self.profit_from))
+        elif cmd == "help":
+            self.say(help_card(self.th, self.target, self.profit_from))
         else:
-            self.say(HELP)
-
-    def status_text(self):
-        t = self.now()
-        lines = ["Сторож: %s; последнее чтение Binance %d с назад; ключ %s; пороги %s / %s / %s; "
-                 "страховка от падения сервера: %s." % (
-                     "слеп" if self.blind else "на месте", round(t - self.last_ok),
-                     "только чтение ✓" if self.key_ok else "не проверен" if self.key_ok is None else "НЕ только чтение",
-                     pct(self.th[0]), pct(self.th[1]), pct(self.th[2]), "есть" if self.hc else "нет")]
-        if not self.positions:
-            lines.append("Открытых позиций нет.")
-        for p in sorted(self.positions, key=lambda q: (distance_pct(q) is None, distance_pct(q) or 0)):
-            lines.append("• " + position_line(p, distance_pct(p), self.mmr.get(p["symbol"])))
-        return "\n".join(lines)
+            self.say("Команды — на кнопках внизу: Статус · Тест · Настройки · Помощь.")
 
     def check_test(self):
         t = self.now()
@@ -892,8 +1546,8 @@ class Guard:
             doc = {}
         if doc.get("acknowledged") == 1:
             at = doc.get("acknowledged_at")
-            self.say("Тест пройден: тревогу подтвердили%s. Звонок до тебя доходит." % (
-                " в %s UTC" % utc(at)[11:19] if isinstance(at, int) else ""))
+            self.say("✅ <b>Звонок дошёл</b> — подтверждён%s." % (
+                " через %d с" % max(0, at - round(self.test["sent"])) if isinstance(at, int) else ""))
             self.journal("test", acknowledged=True, after_s=round(t - self.test["sent"]))
             self.test = None
         elif t >= self.test["deadline"]:
@@ -901,7 +1555,7 @@ class Guard:
                 self.po.cancel(self.test["receipt"])
             except Exception as e:
                 self.err("cancel", e)
-            self.say("Тест не подтверждён за %d мин. Проверь в Pushover: Настройки → Critical Alerts включены, "
+            self.say("⚠️ Тест не подтверждён за %d мин. Проверь в Pushover: Настройки → Critical Alerts включены, "
                      "громкость не на нуле." % (TEST_WAIT_S // 60))
             self.journal("test", acknowledged=False)
             self.test = None
@@ -913,13 +1567,13 @@ class Guard:
         now = dt.datetime.fromtimestamp(t, dt.timezone.utc)
         if self.hb_day != day and (now.hour, now.minute) >= (h, m):
             self.hb_day = day
-            near = min(((distance_pct(p), p) for p in self.positions if distance_pct(p) is not None),
-                       default=None, key=lambda x: x[0])
-            self.say("Сторож на месте: позиций %d%s; ключ %s; пороги %s / %s / %s." % (
-                len(self.positions),
-                ", ближе всех к ликвидации %s — %s" % (near[1]["symbol"], pct(near[0])) if near else "",
-                "только чтение ✓" if self.key_ok else "не проверен", pct(self.th[0]), pct(self.th[1]),
-                pct(self.th[2])), quiet=True)
+            lines = ["🌙 <b>Сторож на посту</b> · позиций %d" % len(self.positions)]
+            for p in sorted(self.positions, key=lambda q: (distance_pct(q) is None, distance_pct(q) or 0.0)):
+                lines.append(position_row(p, self.mmr.get(p["symbol"]), self.th, self.target))
+            lines.append("<i>Ступени %s · %s · %s · цель %s · прибыль от %s</i>" % (
+                ru(self.th[0], 1), ru(self.th[1], 1), pct0(self.th[2]), pct0(self.target),
+                ("+" + pct0(self.profit_from)) if self.profit_from else "выкл"))
+            self.say("\n".join(lines), quiet=True)
             self.journal("heartbeat")
 
     def sync(self):
@@ -943,7 +1597,8 @@ class Guard:
         if t >= self.next_tick:
             self.next_tick = t + TICK_S
             self.journal("tick", polls_ok=self.polls_ok, polls_err=self.polls_err, positions=len(self.positions),
-                         min_distance=self.min_seen, blind=self.blind, outbox=len(self.outbox))
+                         min_distance=self.min_seen, blind=self.blind, outbox=len(self.outbox),
+                         watched=len(self.watch), alarms_open=len(self.alarms))
             d = os.path.join(self.var, "journal")
             cut = utc(t - KEEP_DAYS * 86400)[:10]
             for f in sorted(os.listdir(d)):
@@ -954,15 +1609,15 @@ class Guard:
             self.save_state()
 
     def cycle(self):
-        """One pass: the clock, the key's permissions, the positions, blindness, brackets, the chat, the test, the
-        heartbeat, the outbox, the dead-man, the record, the watchdog. A step's fault is journaled and stops no
-        other step; a key that can do more than read stops the guard."""
+        """One pass: the clock, the key's permissions, the positions, blindness, brackets, the calls' receipts, the
+        watched positions, the chat, the test, the heartbeat, the outbox, the dead-man, the record, the watchdog. A
+        step's fault is journaled and stops no other step; a key that can do more than read stops the guard."""
         if self.now() >= self.next_key:
             self.check_key()
         for name, f in (("sync", self.sync), ("poll", self.poll), ("blind", self.check_blind),
-                        ("brackets", self.refresh_brackets), ("telegram", self.telegram), ("test", self.check_test),
-                        ("heartbeat", self.heartbeat), ("flush", self.flush), ("dead-man", self.ping),
-                        ("tick", self.tick)):
+                        ("brackets", self.refresh_brackets), ("alarms", self.check_alarms), ("tend", self.tend),
+                        ("telegram", self.telegram), ("test", self.check_test), ("heartbeat", self.heartbeat),
+                        ("flush", self.flush), ("dead-man", self.ping), ("tick", self.tick)):
             try:
                 f()
             except KeyRefused:
@@ -1008,7 +1663,7 @@ def mode_secrets(tty=None, etc=ETC, uid=0):
     its form, three times at most, written once by exclusive create, 0600; one already in place and of its form is
     kept. Printed: written, kept or skipped, and the bytes - never a value."""
     tty = tty or Tty()
-    tty.say("Сторож · ТЗ-54: учётные данные. Ввод скрыт; ничего из введённого не попадает ни в журнал, ни в отчёт.")
+    tty.say("Сторож · ТЗ-55: учётные данные. Ввод скрыт; ничего из введённого не попадает ни в журнал, ни в отчёт.")
     rc = 0
     for name, _form, required, prompt in CREDENTIALS:
         path = os.path.join(etc, name)
@@ -1078,14 +1733,26 @@ def mode_find_chat(tg=None, etc=ETC, wait_s=FIND_CHAT_S, uid=0, now=time.time, s
     return 0
 
 
-def see_text(pos):
-    """What the guard sees, for the Boss to hold against his Binance app. Pure."""
-    if not pos:
-        return "Сторож не видит ни одной открытой позиции на фьючерсах USDⓈ-M."
-    lines = ["Сторож видит открытых позиций: %d" % len(pos)]
-    for p in sorted(pos, key=lambda q: (q["symbol"], q["side"])):
-        lines.append("• " + position_line(p, distance_pct(p), None))
-    return "\n".join(lines)
+def see_text(pos, mmrs, th, target, profit_from, now, dead_man):
+    """What the guard sees, for the Boss to hold against his Binance app: its status card. Pure."""
+    return status_card(pos, mmrs, th, target, profit_from, now, now, False, True, dead_man) + \
+        "\n\nСовпадает с твоими позициями в Binance? Ответь «да» или «нет»."
+
+
+SAMPLE_LONG = {"symbol": "SOLUSDT", "side": "LONG", "key": "SOLUSDT:LONG", "qty": 31.0, "mark": 200.01, "liq": 152.6,
+               "notional": 6200.31, "isolated": True, "entry": 186.40, "upnl": 421.91, "lev": 5}
+SAMPLE_SHORT = {"symbol": "YFIUSDT", "side": "SHORT", "key": "YFIUSDT:SHORT", "qty": 2.0, "mark": 1808.1,
+                "liq": 1851.5, "notional": 3616.2, "isolated": True, "entry": 1646.5, "upnl": -323.2, "lev": 10}
+
+
+def samples():
+    """The two examples G-LOOK shows: a long's record and a short's alarm - (side, title, message, card, buttons). Pure."""
+    ev = {"kind": "record", "gain": gain_pct("LONG", SAMPLE_LONG["entry"], SAMPLE_LONG["mark"]), "next": 10.3}
+    t1, m1 = record_push(SAMPLE_LONG, ev)
+    c1, b1 = record_card(SAMPLE_LONG, ev, (5.1, 5))
+    t2, m2 = liq_push(SAMPLE_SHORT, 0.005, TARGET_PCT, 2)
+    c2, b2 = liq_card(SAMPLE_SHORT, 0.005, TARGET_PCT, DEFAULT_THRESHOLDS, 2, "ring", (3.3, 5))
+    return [("LONG", t1 + " (пример)", m1, c1, b1), ("SHORT", t2 + " (пример)", m2, c2, b2)]
 
 
 def answer_of(updates, chat):
@@ -1105,8 +1772,10 @@ def answer_of(updates, chat):
 def mode_prove(net=None, etc=ETC, var=VAR, uid=0, now=time.time, sleep=time.sleep, code=None):
     """CANON hard rule 14: every request path the unit uses, through this file's own functions, served and parsed;
     the key read able to read and nothing else, and bound to an address; what it sees confirmed by the Boss in his
-    chat as every open position he has; a test alarm sent at Pushover's emergency priority and acknowledged on his
-    phone. Its record, prove.json, carries this code's SHA-256."""
+    chat as every open position he has; the two examples of its alerts - a long's through its application, a short's
+    through its own - confirmed by him as he sees them; a test alarm sent at Pushover's emergency priority and
+    acknowledged on his phone; the dead-man pinged, and kept quiet through the waits. Its record, prove.json, carries
+    this code's SHA-256."""
     creds, problems = read_credentials(etc, uid)
     gates = []
 
@@ -1114,20 +1783,32 @@ def mode_prove(net=None, etc=ETC, var=VAR, uid=0, now=time.time, sleep=time.slee
         gates.append({"gate": name, "pass": bool(ok), "detail": detail})
         out("%s %s - %s" % (name, "PASS" if ok else "FAIL", detail))
         return ok
-    if not gate("G-CRED", not problems, "%d credentials of their form, 0600, root's; the dead-man %s%s" % (
-            len(creds), "set" if "hc-url" in creds else "not set", "; " + "; ".join(problems) if problems else "")):
+    sides = [s for s in ("LONG", "SHORT") if "pushover-" + s.lower() in creds]
+    if not gate("G-CRED", not problems, "%d credentials of their form, 0600, root's; the dead-man %s; side "
+                                        "applications %d%s" % (len(creds), "set" if "hc-url" in creds else "not set",
+                                                               len(sides), "; " + "; ".join(problems) if problems else "")):
         return 4
     scrub = Scrub(creds)
     net = net or Net(timeout=LONG_POLL_S + 15)
     bn = Binance(net, creds["binance-key"], creds["binance-secret"], now)
     po = Pushover(net, creds["pushover-token"], creds["pushover-user"])
+    apps = {s: Pushover(net, creds["pushover-" + s.lower()], creds["pushover-user"]) if s in sides else po
+            for s in ("LONG", "SHORT")}
     tg = Telegram(net, creds["tg-token"])
+    beat = [0.0]
 
     def tried(name, f):
         try:
             return f(), None
         except Exception as e:
             return None, scrub("%s: %s" % (type(e).__name__, e))[:300]
+
+    def keep_alive():
+        """The dead-man pinged at most once a minute while the prove waits on the Boss, so that no wait reads at
+        healthchecks.io as the host's death."""
+        if "hc-url" in creds and now() - beat[0] >= HC_S:
+            beat[0] = now()
+            tried("dead-man", lambda: hc_ping(net, creds["hc-url"]))
     off, e = tried("time", bn.sync_time)
     gate("G-TIME", e is None and abs(off) < 2000, "Binance's clock less this host's: %s ms" % (off if e is None else e))
     doc, e = tried("key", bn.restrictions)
@@ -1140,48 +1821,86 @@ def mode_prove(net=None, etc=ETC, var=VAR, uid=0, now=time.time, sleep=time.slee
             pos = parse_positions(raw)
         except AssertionError as x:
             e = scrub(x)
-    gate("G-POS", e is None, ("%s served; open positions %d, with a liquidation price %d" % (
-        bn.position_path, len(pos), sum(1 for p in pos if distance_pct(p) is not None))) if e is None else e)
+    gate("G-POS", e is None, ("%s served; open positions %d, with a liquidation price %d, with an entry price %d" % (
+        bn.position_path, len(pos), sum(1 for p in pos if distance_pct(p) is not None),
+        sum(1 for p in pos if p["entry"]))) if e is None else e)
     sym = pos[0]["symbol"] if pos else "BTCUSDT"
     br, e = tried("brackets", lambda: bn.brackets(sym))
     n = len((br[0] if isinstance(br, list) and br else br or {}).get("brackets") or []) if e is None else 0
     gate("G-BRACKET", e is None and n > 0, ("leverage brackets of one held symbol: %d" % n) if e is None else e)
-    _v, e = tried("pushover", po.validate)
-    gate("G-PUSH", e is None, "the user key and token validated" if e is None else e)
+    errs = []
+    for name, app in [("main", po)] + [(s, apps[s]) for s in sides]:
+        _v, e = tried("pushover", app.validate)
+        if e is not None:
+            errs.append("%s: %s" % (name, e))
+    gate("G-PUSH", not errs, ("the user key and %d application tokens validated" % (1 + len(sides))) if not errs
+         else "; ".join(errs))
     me, e = tried("telegram", lambda: tg.call("getMe"))
     if e is None:
-        _s, e = tried("telegram", lambda: tg.send(creds["tg-chat"], "Сторож · проверка связи (ТЗ-54)."))
+        _s, e = tried("telegram", lambda: tg.send(creds["tg-chat"], "🛡 Сторож · проверка связи (ТЗ-55)."))
     gate("G-TG", e is None, "getMe and one message to the pinned chat" if e is None else e)
-    if all(g["pass"] for g in gates):
-        chat = int(creds["tg-chat"])
-        last, e = tried("telegram", lambda: tg.call("getUpdates", offset=-1, timeout=0, allowed_updates=["message"]))
-        offset = (last[-1]["update_id"] + 1) if e is None and last else 0
-        if e is None:
-            _s, e = tried("telegram", lambda: tg.send(chat, see_text(pos) + "\n\nСовпадает с твоими позициями в "
-                                                                       "Binance? Ответь «да» или «нет»."))
+    chat = int(creds["tg-chat"])
+    offset = [0]
+
+    def ask(text, wait=SEE_WAIT_S):
+        """(the Boss's yes or no or None, the seconds he took, an error): `text` sent, his answer read."""
+        _s, e = tried("telegram", lambda: tg.send(chat, text))
         said, t0 = None, now()
-        while e is None and said is None and now() - t0 < SEE_WAIT_S:
-            ups, e2 = tried("telegram", lambda: tg.call("getUpdates", offset=offset, timeout=LONG_POLL_S,
-                                                        allowed_updates=["message"]))
+        while e is None and said is None and now() - t0 < wait:
+            keep_alive()
+            ups, e2 = tried("telegram", lambda: tg.call("getUpdates", offset=offset[0], timeout=LONG_POLL_S,
+                                                        allowed_updates=["message", "callback_query"]))
             if e2 is not None:
                 sleep(5)
                 continue
             if ups:
-                offset = ups[-1]["update_id"] + 1
+                offset[0] = ups[-1]["update_id"] + 1
             said = answer_of(ups, chat)
+        return said, round(now() - t0), e
+    if all(g["pass"] for g in gates):
+        last, e = tried("telegram", lambda: tg.call("getUpdates", offset=-1, timeout=0,
+                                                    allowed_updates=["message", "callback_query"]))
+        offset[0] = (last[-1]["update_id"] + 1) if e is None and last else 0
+        try:
+            with open(os.path.join(var, "state.json"), encoding="utf-8") as fh:
+                st = json.load(fh)
+        except (OSError, ValueError):
+            st = {}
+        th, target, profit_from = settings_of(st if isinstance(st, dict) else {})
+        said, took, e = ask(see_text(pos, {}, th, target, profit_from, now(), "hc-url" in creds)) if e is None \
+            else (None, 0, e)
         gate("G-SEE", said is True, e or ("the Boss answered yes to the list of %d positions after %d s" % (
-            len(pos), round(now() - t0)) if said is True else "the Boss answered no" if said is False
+            len(pos), took) if said is True else "the Boss answered no" if said is False
             else "no answer in %d s" % SEE_WAIT_S))
     if all(g["pass"] for g in gates):
-        r, e = tried("alarm", lambda: po.send("Сторож: проверка тревоги (ТЗ-54)",
-                                               "Нажми «Подтвердить» — так проверяется, что тревога будит тебя.", 2,
-                                               TEST_EXPIRE_S))
+        errs = []
+        for side, title, text, card, buttons in samples():
+            _r, e = tried("sample", lambda: apps[side].send(title, text, 0, sound=SOUND["sample"],
+                                                            url=BINANCE_URL % ("SOLUSDT" if side == "LONG" else
+                                                                               "YFIUSDT"),
+                                                            url_title="Открыть в Binance"))
+            if e is None:
+                _s, e = tried("telegram", lambda: tg.send(chat, card, False, buttons))
+            if e is not None:
+                errs.append(e)
+        said, took, e = ask("☝️ Два примера сигналов — 🟢 лонг и 🔴 шорт: здесь и на экране блокировки (Pushover). "
+                            "Цвета видны, всё читается? Ответь «да» или «нет».") if not errs else (None, 0, errs[0])
+        gate("G-LOOK", said is True, e or ("two examples through %d side applications; the Boss answered yes after "
+                                           "%d s" % (len(sides), took) if said is True else "the Boss answered no"
+                                           if said is False else "no answer in %d s" % SEE_WAIT_S))
+    if all(g["pass"] for g in gates):
+        tried("telegram", lambda: tg.call("getUpdates", offset=offset[0], timeout=0,
+                                          allowed_updates=["message", "callback_query"]))
+        r, e = tried("alarm", lambda: po.send("🛡 Сторож · проверка звонка (ТЗ-55)",
+                                               "Нажми «Подтвердить» — так проверяется, что звонок будит тебя.", 2,
+                                               TEST_EXPIRE_S, SOUND["test"]))
         acked, waited = False, 0
         if e is None:
-            tried("telegram", lambda: tg.send(creds["tg-chat"], "Сейчас зазвонит Pushover — нажми «Подтвердить»."))
+            tried("telegram", lambda: tg.send(creds["tg-chat"], "🔔 Сейчас зазвонит Pushover — нажми «Подтвердить»."))
             t0 = now()
             while now() - t0 < TEST_WAIT_S:
                 sleep(RECEIPT_EVERY_S)
+                keep_alive()
                 d, e2 = tried("receipt", lambda: po.receipt(r))
                 if e2 is None and d.get("acknowledged") == 1:
                     acked = True
@@ -1189,7 +1908,8 @@ def mode_prove(net=None, etc=ETC, var=VAR, uid=0, now=time.time, sleep=time.slee
             waited = round(now() - t0)
             if not acked:
                 tried("cancel", lambda: po.cancel(r))
-        gate("G-ALARM", acked, ("acknowledged after %d s" % waited) if acked else (e or "not acknowledged in %d s" % TEST_WAIT_S))
+        gate("G-ALARM", acked, ("acknowledged after %d s" % waited) if acked else (e or "not acknowledged in %d s" %
+                                                                                    TEST_WAIT_S))
     if all(g["pass"] for g in gates):
         if "hc-url" in creds:
             _h, e = tried("dead-man", lambda: hc_ping(net, creds["hc-url"]))
@@ -1215,8 +1935,9 @@ def mode_status(var=VAR):
         return 4
     with open(path, encoding="utf-8") as fh:
         st = json.load(fh)
-    keys = ("at", "started", "last_ok", "polls_ok", "polls_err", "positions", "with_liquidation", "blind", "key_ok",
-            "key_checked", "dead_man", "outbox", "disk_faults", "thresholds", "pid")
+    keys = ("at", "started", "last_ok", "polls_ok", "polls_err", "positions", "with_liquidation", "watched", "engaged",
+            "alarms_open", "side_apps", "blind", "key_ok", "key_checked", "dead_man", "outbox", "disk_faults",
+            "thresholds", "target", "profit_from", "pid")
     out("STATUS " + "; ".join("%s %s" % (k, st.get(k)) for k in keys))
     jd = os.path.join(var, "journal")
     files = sorted(os.listdir(jd)) if os.path.isdir(jd) else []
@@ -1279,15 +2000,16 @@ def mode_serve(etc=ETC, var=VAR):
     g = Guard(creds, var=var)
     stop = []
     signal.signal(signal.SIGTERM, lambda *_a: stop.append(1))
-    g.journal("start", code=sha256_file(os.path.abspath(__file__)), thresholds=list(g.th), dead_man=bool(g.hc))
+    g.journal("start", code=sha256_file(os.path.abspath(__file__)), thresholds=list(g.th), target=g.target,
+              profit_from=g.profit_from, dead_man=bool(g.hc), side_apps=[s for s in ("LONG", "SHORT")
+                                                                          if g.apps[s] is not g.po])
     try:
         g.check_key()
     except KeyRefused as e:
         return refuse(g, e)
     g.poll()
-    g.say("Сторож запущен: позиций %d; пороги %s / %s / %s; ключ %s." % (
-        len(g.positions), pct(g.th[0]), pct(g.th[1]), pct(g.th[2]),
-        "только чтение ✓" if g.key_ok else "ещё не проверен"), quiet=True)
+    g.say("🛡 <b>Сторож запущен</b> · версия 2 · позиций %d · ключ %s" % (
+        len(g.positions), "только чтение ✓" if g.key_ok else "ещё не проверен"), quiet=True)
     g.flush()
     g.save_state()
     g.notify("READY=1")
@@ -1309,9 +2031,10 @@ def mode_serve(etc=ETC, var=VAR):
 
 
 def refuse(g, e):
-    text = "Сторож остановлен: ключ Binance может больше, чем читать (%s). Создай ключ только с «Enable Reading» и " \
-           "привязкой к IP сервера." % "; ".join(e.args[0])
-    for f in (lambda: g.po.send("Сторож остановлен", text, 1), lambda: g.tg.send(g.chat, "🔴 " + text)):
+    text = "Ключ Binance может больше, чем читать (%s). Создай ключ только с «Enable Reading» и привязкой к IP " \
+           "сервера." % esc("; ".join(e.args[0]))
+    for f in (lambda: g.po.send("⛔ Сторож остановлен", text, 1), lambda: g.tg.send(g.chat, "⛔ <b>Сторож "
+                                                                                     "остановлен</b>\n" + text)):
         try:
             f()
         except Exception as x:
@@ -1325,7 +2048,8 @@ def refuse(g, e):
 # ---- the self-test: stand-ins for Binance, Pushover, Telegram and healthchecks ----------------------------------
 
 class FakeNet:
-    """Binance, Pushover, Telegram and healthchecks.io as dictionaries; every request recorded."""
+    """Binance, Pushover, Telegram and healthchecks.io as dictionaries; every request recorded. A question that asks
+    for «да» or «нет» is answered from `answer`, the examples' from `look`."""
 
     def __init__(self, key, secret, positions=(), perms=None):
         self.key, self.secret, self.log, self.count = key, secret, [], {}
@@ -1338,7 +2062,8 @@ class FakeNet:
                                                      "enableSpotAndMarginTrading": False,
                                                      "enablePortfolioMarginTrading": False, "createTime": 1}
         self.pushes, self.receipts, self.tg_sent, self.updates, self.v3 = [], {}, [], [], True
-        self.answer = "Да"
+        self.tg_edits, self.tg_answers, self.next_id = [], [], 100
+        self.answer, self.look = "Да", "да"
         self.now = time.time
 
     def call(self, host, method, path, body=None, headers=()):
@@ -1395,11 +2120,19 @@ class FakeNet:
                 return 200, b'{"ok":true,"result":{"id":1,"is_bot":true}}'
             if meth == "sendMessage":
                 self.tg_sent.append(p)
-                if "Совпадает" in p["text"] and self.answer is not None:
+                said = self.look if "Цвета видны" in p["text"] else self.answer
+                if "Ответь «да» или «нет»" in p["text"] and said is not None:
                     n = max([x["update_id"] for x in self.updates] or [0]) + 1
-                    self.updates.append({"update_id": n, "message": {"text": self.answer,
+                    self.updates.append({"update_id": n, "message": {"text": said,
                                                                     "chat": {"id": p["chat_id"], "type": "private"}}})
-                return 200, b'{"ok":true,"result":{"message_id":1}}'
+                self.next_id += 1
+                return 200, json.dumps({"ok": True, "result": {"message_id": self.next_id}}).encode()
+            if meth == "editMessageText":
+                self.tg_edits.append(p)
+                return 200, b'{"ok":true,"result":true}'
+            if meth == "answerCallbackQuery":
+                self.tg_answers.append(p)
+                return 200, b'{"ok":true,"result":true}'
             if meth == "getUpdates":
                 off = p.get("offset", 0)          # as Telegram: an offset confirms, and forgets, what is before it
                 self.updates = self.updates[off:] if off < 0 else [x for x in self.updates if x["update_id"] >= off]
@@ -1485,6 +2218,12 @@ def on_terminal(child, script, timeout=60):
     return os.waitstatus_to_exitcode(status), screen, log.decode("utf-8", "replace"), pending
 
 
+def wellformed(text):
+    """Every tag this file sends to Telegram opened and closed as often - b, i, pre, code, blockquote. Pure."""
+    return all(text.count("<%s>" % t) + text.count("<%s " % t) == text.count("</%s>" % t)
+               for t in ("b", "i", "pre", "code", "blockquote"))
+
+
 def mode_selftest():
     import shutil
     import tempfile
@@ -1503,33 +2242,65 @@ def mode_selftest():
                                                         ("SHORT", 1200.0, 2.31, 180.0, 0.025, 12.5, 2.40)):
             lp = binance_lp(side, qty, entry, wallet, mmr, cum)
             p = {"side": side, "qty": qty, "mark": mark, "liq": lp, "isolated": True}
-            need = margin_hint(p, mmr, 8.0)
-            lp2 = binance_lp(side, qty, entry, wallet + need, mmr, cum)
-            d2 = distance_pct({"side": side, "mark": mark, "liq": lp2})
-            check(need > 0 and abs(d2 - 8.0) < 1e-9, "the margin hint moves %s's liquidation to 8%%: %r" % (side, d2))
+            for target in (8.0, TARGET_PCT):
+                need = margin_hint(p, mmr, target)
+                lp2 = binance_lp(side, qty, entry, wallet + need, mmr, cum)
+                d2 = distance_pct({"side": side, "mark": mark, "liq": lp2})
+                check(need > 0 and abs(d2 - target) < 1e-9, "the margin hint moves %s's liquidation to %s%%: %r" % (
+                    side, target, d2))
+                check(abs(target_price(p, target) - lp2) < 1e-6 * lp2, "the target's liquidation price")
             check(margin_hint(dict(p, liq=binance_lp(side, qty, entry, wallet + need + 100, mmr, cum)), mmr) == 0.0,
                   "no hint where the liquidation is beyond the target")
         check(abs(distance_pct({"side": "SHORT", "mark": 100.0, "liq": 103.0}) - 3.0) < 1e-12, "a short's distance")
         check(abs(distance_pct({"side": "LONG", "mark": 100.0, "liq": 97.0}) - 3.0) < 1e-12, "a long's distance")
         check(distance_pct({"side": "LONG", "mark": 100.0, "liq": 0.0}) is None, "no liquidation price, no distance")
-        # -- levels: announce once a descent, the highest of a jump, re-arm above threshold + 1 -------------------
+        # -- stages: announce once a descent, the highest of a jump, re-arm above threshold + 1 -------------------
         th, f, seq = (5.0, 3.0, 1.5), frozenset(), []
         for d in (6.0, 4.9, 4.5, 2.9, 2.8, 1.4, 1.0, 2.6, 1.4, 8.0, 0.9, None, 4.0):
             lvl, f = step(f, d, th)
             seq.append(lvl)
-        check(seq == [0, 1, 0, 2, 0, 3, 0, 0, 3, 0, 3, 0, 1], "the levels announced: %r" % seq)
+        check(seq == [0, 1, 0, 2, 0, 3, 0, 0, 3, 0, 3, 0, 1], "the stages announced: %r" % seq)
         check(step(frozenset({1}), 5.5, th)[1] == frozenset({1}) and step(frozenset({1}), 6.01, th)[1] == frozenset(),
               "hysteresis of one point")
+        # -- gains: records, retreats, an entry moved, a short, off ---------------------------------------------------
+        m, kinds = None, []
+        for k, mk in enumerate((105, 107.2, 108, 110.3, 109, 107.5, 106.8, 105.5, 105.1, 104, 113.4)):
+            m, evs = profit_step(m, {"side": "LONG", "entry": 100.0, "mark": float(mk)}, 1000.0 + k, PROFIT_FROM)
+            kinds.append(evs[0]["kind"] + str(evs[0].get("stage", "")) if evs else "-")
+        check(kinds == ["-", "record", "-", "record", "-", "-", "pullback1", "-", "pullback2", "-", "record"],
+              "records and retreats - a third given back, not a quarter; half: %r" % kinds)
+        check(m["best"] == 113.4 and m["best_t"] == 1010.0 and m["pb"] == 0 and abs(m["rec"] - 13.4) < 1e-9,
+              "the memory after: %r" % m)
+        m2, evs = profit_step(m, {"side": "LONG", "entry": 101.0, "mark": 113.4}, 2000.0, PROFIT_FROM)
+        check(m2["entry"] == 101.0 and m2["best"] == 113.4 and [e["kind"] for e in evs] == ["record"],
+              "an entry moved starts the gains again")
+        _m, evs = profit_step(None, {"side": "SHORT", "entry": 100.0, "mark": 93.0}, 1.0, PROFIT_FROM)
+        check([e["kind"] for e in evs] == ["record"] and abs(evs[0]["gain"] - 7.0) < 1e-9, "a short's record at 7%")
+        check(profit_step(None, {"side": "SHORT", "entry": 100.0, "mark": 80.0}, 1.0, 0.0)[1] == [], "off at 0")
+        check(profit_step(None, {"side": "LONG", "entry": None, "mark": 80.0}, 1.0, 7.0) == (None, []), "no entry")
+        check(next_record(7.2) == 10.2 and abs(next_record(20.0) - 25.0) < 1e-12, "the next record")
+        # -- margin added, the last line, the trend --------------------------------------------------------------------
+        check(topup_seen("SHORT", 1610.0, 1700.0) and not topup_seen("SHORT", 1610.0, 1612.0)
+              and topup_seen("LONG", 50000.0, 49800.0) and not topup_seen("LONG", 50000.0, 49950.0)
+              and not topup_seen("LONG", None, 49000.0), "margin added seen")
+        check(last_line((4.0, 2.5, 1.5)) == 1.0 and last_line((3.0, 1.0, 0.5)) == 0.5, "the last line")
+        hist = [(0.0, 3.3, None), (200.0, 3.0, None), (290.0, 2.8, None)]
+        check(then_of(hist, 300.0, 1) == (3.3, 5) and then_of(hist[2:], 300.0, 1) is None
+              and arrow(2.4, 3.3) == "↘" and arrow(3.3, 2.4) == "↗" and arrow(3.0, 3.01) == "→", "the trend")
         # -- positions, brackets, the key's permissions, commands ----------------------------------------------------
         raw = [{"symbol": "YFIUSDT", "positionSide": "BOTH", "positionAmt": "-25.000", "markPrice": "1596.20",
-                "liquidationPrice": "1700.00", "notional": "-39905.0", "isolatedWallet": "4100.0"},
+                "liquidationPrice": "1700.00", "notional": "-39905.0", "isolatedWallet": "4100.0",
+                "entryPrice": "1646.5", "unRealizedProfit": "1257.5", "positionInitialMargin": "3990.5"},
                {"symbol": "BTCUSDT", "positionSide": "LONG", "positionAmt": "0.500", "markPrice": "92000",
-                "liquidationPrice": "0", "notional": "46000", "isolatedWallet": "0"},
+                "liquidationPrice": "0", "notional": "46000", "isolatedWallet": "0", "entryPrice": "90000",
+                "unRealizedProfit": "1000", "leverage": "20"},
                {"symbol": "ETHUSDT", "positionSide": "BOTH", "positionAmt": "0.000", "markPrice": "3000",
                 "liquidationPrice": "0"}]
         ps = parse_positions(raw)
-        check([(p["symbol"], p["side"], p["isolated"]) for p in ps] == [("YFIUSDT", "SHORT", True),
-                                                                        ("BTCUSDT", "LONG", False)], "positions: %r" % ps)
+        check([(p["symbol"], p["side"], p["isolated"], p["entry"], p["lev"]) for p in ps] ==
+              [("YFIUSDT", "SHORT", True, 1646.5, 10), ("BTCUSDT", "LONG", False, 90000.0, 20)], "positions: %r" % ps)
+        check(abs(roe_pct(ps[0]) - 100 * 1257.5 / (25 * 1646.5 / 10)) < 1e-9 and roe_pct(dict(ps[0], lev=None)) is None,
+              "ROE over the initial margin at the entry")
         br = {"brackets": [{"notionalFloor": 50000, "notionalCap": 250000, "maintMarginRatio": 0.02, "cum": 500},
                            {"notionalFloor": 0, "notionalCap": 50000, "maintMarginRatio": 0.01, "cum": 0}]}
         check(bracket_for(br, 39905.0) == (0.01, 0.0) and bracket_for([br], 60000) == (0.02, 500.0)
@@ -1542,13 +2313,50 @@ def mode_selftest():
         check(key_reading(dict(good, ipRestrict=False))[0] is False, "refused: no address")
         check(key_reading({k: v for k, v in good.items() if k != "enableFutures"})[0] is False, "refused: absent field")
         check(parse_command("/status@SomeBot") == ("status", []) and parse_command("Пороги 5 3 1,5")
-              == ("thresholds", ["5", "3", "1,5"]) and parse_command("  ТЕСТ ") == ("test", []), "commands")
+              == ("thresholds", ["5", "3", "1,5"]) and parse_command("  ТЕСТ ") == ("test", [])
+              and parse_command("Цель 5") == ("target", ["5"]) and parse_command("Прибыль выкл") == ("profit", ["выкл"])
+              and parse_command("Настройки") == ("settings", []), "commands")
         check(thresholds_of(["5", "3", "1,5"]) == (5.0, 3.0, 1.5) and thresholds_of(["3", "5", "1"]) is None
-              and thresholds_of(["40", "3", "1"]) is None and thresholds_of(["5", "3"]) is None, "thresholds")
-        check(price(1596.2) == "1 596,2" and price(0.00012346) == "0,0001235" and pct(2.94) == "2,9%",
-              "notation: %r %r" % (price(1596.2), price(0.00012346)))
+              and thresholds_of(["40", "3", "1"]) is None and thresholds_of(["5", "3"]) is None
+              and thresholds_of(["5", "x", "1"]) is None, "thresholds")
+        check(target_of(["5"]) == 5.0 and target_of(["7,5"]) == 7.5 and target_of(["0,5"]) is None
+              and target_of(["31"]) is None and profit_of(["7"]) == 7.0 and profit_of(["0"]) == 0.0
+              and profit_of(["выкл"]) == 0.0 and profit_of(["2"]) is None and profit_of([]) is None, "target, profit")
+        check(settings_of({"thresholds": [4.0, 2.5, 1.5], "target": 6, "profit_from": 0.0}) == ((4.0, 2.5, 1.5), 6, 0.0)
+              and settings_of({"thresholds": [1, 2, 3], "target": True}) == (DEFAULT_THRESHOLDS, TARGET_PCT, PROFIT_FROM),
+              "settings kept, and defaults where a value is not of its form")
+        check(price(1596.2) == "1 596,2" and price(0.00012346) == "0,0001235" and pct(2.94) == "2,9%"
+              and spct(7.31) == "+7,3%" and spct(-2.06) == "−2,1%" and money(1240.4) == "+1 240 USDT"
+              and money(-162.2) == "−162 USDT" and pct0(5.0) == "5%" and pct0(2.5) == "2,5%"
+              and coin("YFIUSDT") == "YFI" and coin("USDT") == "USDT", "notation")
         sc = Scrub({"binance-key": "A" * 64, "tg-chat": "123"})
         check(sc("key %s from 203.0.113.9" % ("A" * 64)) == "key *** from x.x.x.x", "scrub")
+        # -- the texts: each colour first, HTML well formed, within the channels' limits ------------------------------
+        y = ps[0]
+        lc, lb = liq_card(dict(y, liq=1615.0), 0.01, 5.0, (4.0, 2.5, 1.5), 3, "ring", (3.3, 5))
+        check(lc.startswith("🔴 <b>YFI · SHORT ×10</b>") and "Последний рубеж — ступень 3 из 3" in lc and "Добавь" in lc
+              and "↘ <i>5 мин назад 3,3%</i>" in lc and lb[0][0]["url"] == BINANCE_URL % "YFIUSDT"
+              and lb[1][0]["callback_data"] == "eng:YFIUSDT:SHORT", "a short's liquidation card: %r" % lc)
+        ec, eb = liq_card(dict(y, liq=1615.0), 0.01, 5.0, (4.0, 2.5, 1.5), 3, "engaged", None, 1.8e9)
+        check("Ты в деле" in ec and len(eb) == 1, "the engaged card keeps the link alone")
+        tt, tm = liq_push(dict(y, liq=1640.0), 0.01, 5.0, 2)
+        check(tt == "🔴 YFI SHORT · 🚨 до ликвидации 2,7%" and "Подтвердить" in tm and "Добавь <b>" in tm, "a push: %r" % tt)
+        b = dict(ps[1], liq=None, mark=96400.0)
+        rt, rm = record_push(b, {"gain": gain_pct("LONG", 90000.0, 96400.0), "next": 10.1})
+        check(rt == "🟢 BTC LONG · 💰 +7,1% от входа" and "Новый рекорд" in rm, "a record's push: %r" % rt)
+        texts = [lc, ec, rm, tm, record_card(b, {"gain": 7.1, "next": 10.1}, (5.1, 5))[0],
+                 pullback_card(b, {"stage": 1, "gain": 6.7, "peak": 10.3, "given": 35.0},
+                               {"best_t": 1.8e9, "rec": 10.3})[0],
+                 pullback_card(b, {"stage": 2, "gain": -0.5, "peak": 10.3, "given": 104.9},
+                               {"best_t": 1.8e9, "rec": 10.3})[0],
+                 status_card(ps, {}, (4.0, 2.5, 1.5), 5.0, 7.0, 1.8e9, 1.8e9 - 3, False, True, True),
+                 status_card([], {}, DEFAULT_THRESHOLDS, 5.0, 0.0, 1.8e9, 1.8e9 - 300, True, None, False),
+                 settings_card((4.0, 2.5, 1.5), 5.0, 7.0), help_card((4.0, 2.5, 1.5), 5.0, 7.0)]
+        texts += [s[3] for s in samples()] + [s[2] for s in samples()]
+        check(all(wellformed(t) and len(t) <= 4000 for t in texts), "every text's HTML well formed")
+        check(all(len(s[1]) <= 250 and len(s[2]) <= 1024 and s[1][0] in "🟢🔴" for s in samples()),
+              "the examples within Pushover's limits, each colour first")
+        check("Прибыль ушла" in texts[6] and "⚠️" not in texts[7].split("\n")[1], "a gain gone; no warning far off")
         # -- IPv4 alone ----------------------------------------------------------------------------------------------
         seen = []
 
@@ -1586,25 +2394,29 @@ def mode_selftest():
         # -- secrets at a real terminal ------------------------------------------------------------------------------
         etc = os.path.join(root, "etc")
         vals = {"binance-key": "K" * 64, "binance-secret": "S" * 64, "pushover-user": "u" * 30,
-                "pushover-token": "a" * 30, "tg-token": "123456789:" + "T" * 35}
+                "pushover-token": "a" * 30, "tg-token": "123456789:" + "T" * 35, "pushover-long": "L" * 30}
         script = [("API Key", "not-a-key"), ("API Key", vals["binance-key"]), ("Secret Key", vals["binance-secret"]),
                   ("User Key", vals["pushover-user"]), ("API Token", vals["pushover-token"]),
-                  ("BotFather", vals["tg-token"]), ("hc-ping.com", "")]
+                  ("BotFather", vals["tg-token"]), ("hc-ping.com", ""), ("Сторож LONG", vals["pushover-long"]),
+                  ("Сторож SHORT", "")]
         rc, screen, log, left = on_terminal(lambda: mode_secrets(etc=etc, uid=uid), script)
         check(rc == 0 and not left, "secrets at a real terminal: rc %s, left %d, log %r" % (rc, len(left), log[-300:]))
         check(all(v not in screen + log for v in vals.values()), "no value echoed or logged")
         check(sorted(os.listdir(etc)) == sorted(vals) and all(private_file_ok(os.path.join(etc, k), uid=uid)
-                                                              for k in vals), "five files, 0600")
-        check("hc-url: skipped" in log and "written, 65 bytes" in log, "the log: written and skipped")
-        rc2, _s, log2, _l = on_terminal(lambda: mode_secrets(etc=etc, uid=uid), [("hc-ping.com", "")])
-        check(rc2 == 0 and log2.count(": kept") == 5 and "hc-url: skipped" in log2,
-              "a second run keeps them and asks for the optional one again: %r" % log2[-200:])
+                                                              for k in vals), "six files, 0600")
+        check("hc-url: skipped" in log and "pushover-short: skipped" in log and "written, 65 bytes" in log,
+              "the log: written and skipped")
+        rc2, _s, log2, _l = on_terminal(lambda: mode_secrets(etc=etc, uid=uid), [("hc-ping.com", ""),
+                                                                                 ("Сторож SHORT", "")])
+        check(rc2 == 0 and log2.count(": kept") == 6 and "hc-url: skipped" in log2 and "pushover-short: skipped" in log2,
+              "a second run keeps them and asks for the optional ones again: %r" % log2[-200:])
         # -- find-chat -----------------------------------------------------------------------------------------------
         fn = FakeNet(vals["binance-key"], vals["binance-secret"])
         fn.updates = [{"update_id": 7, "message": {"text": "/start", "chat": {"id": 4242, "type": "private"}}}]
         check(mode_find_chat(Telegram(fn, vals["tg-token"]), etc, 5, uid) == 0, "find-chat pins one chat")
         creds, problems = read_credentials(etc, uid)
-        check(problems == [] and creds["tg-chat"] == "4242", "credentials read: %r" % problems)
+        check(problems == [] and creds["tg-chat"] == "4242" and "pushover-short" not in creds,
+              "credentials read: %r" % problems)
         # -- prove ---------------------------------------------------------------------------------------------------
         clock = [1.8e9]
         var = os.path.join(root, "var")
@@ -1616,19 +2428,29 @@ def mode_selftest():
         fn.positions, fn.now = raw, (lambda: clock[0])
         check(mode_prove(fn, etc, var, uid, lambda: clock[0], ack_later, code="c" * 64) == 0, "prove passes")
         rec = json.load(open(os.path.join(var, "prove.json")))
-        check(rec["pass"] is True and [g["gate"] for g in rec["gates"]] == list(PROVE_GATES), "prove's ten gates")
+        check(rec["pass"] is True and [g["gate"] for g in rec["gates"]] == list(PROVE_GATES), "prove's eleven gates")
+        ex = [x for x in fn.pushes if x["title"].endswith("(пример)")]
+        check([(x["title"][0], x["token"], x["priority"]) for x in ex] == [("🟢", vals["pushover-long"], "0"),
+                                                                          ("🔴", vals["pushover-token"], "0")]
+              and "url" in ex[0] and ex[0]["html"] == "1", "the examples: the long's through its own application")
         write_private(os.path.join(etc, "hc-url"), b"https://hc-ping.com/0f0e0d0c-0b0a-4908-8706-050403020100\n", uid)
         n_hc = fn.count.get(HC, 0)
         check(mode_prove(fn, etc, var, uid, lambda: clock[0], ack_later, code="c" * 64) == 0
               and json.load(open(os.path.join(var, "prove.json")))["gates"][-1]["detail"] == "the dead-man's ping answered OK"
-              and fn.count.get(HC, 0) == n_hc + 1, "the dead-man pinged once, last, after the Boss's answers")
-        check(any("YFIUSDT шорт" in m["text"] and "Совпадает" in m["text"] for m in fn.tg_sent), "the list shown")
+              and fn.count.get(HC, 0) >= n_hc + 2, "the dead-man kept quiet through the waits and pinged last")
+        check(any("YFI" in m["text"] and "Совпадает" in m["text"] for m in fn.tg_sent), "the list shown")
         fn.answer = "нет"
         check(mode_prove(fn, etc, var, uid, lambda: clock[0], ack_later, code="c" * 64) == 4,
               "prove fails where the Boss answers no")
         check(json.load(open(os.path.join(var, "prove.json")))["gates"][-1]["gate"] == "G-SEE", "no alarm after a no")
-        fn.answer = "да"
-        check(fn.pushes[-1]["priority"] == "2" and fn.pushes[-1]["expire"] == str(TEST_EXPIRE_S), "a test alarm")
+        fn.answer, fn.look = "да", "нет"
+        check(mode_prove(fn, etc, var, uid, lambda: clock[0], ack_later, code="c" * 64) == 4
+              and json.load(open(os.path.join(var, "prove.json")))["gates"][-1]["gate"] == "G-LOOK",
+              "prove fails where the Boss rejects the examples")
+        fn.look = "да"
+        check(mode_prove(fn, etc, var, uid, lambda: clock[0], ack_later, code="c" * 64) == 0, "prove passes again")
+        check(fn.pushes[-1]["priority"] == "2" and fn.pushes[-1]["expire"] == str(TEST_EXPIRE_S)
+              and fn.pushes[-1]["sound"] == SOUND["test"], "a test alarm")
         fn.perms = dict(fn.perms, enableFutures=True)
         check(mode_prove(fn, etc, var, uid, lambda: clock[0], ack_later, code="c" * 64) == 4,
               "prove refuses a key that can trade")
@@ -1637,60 +2459,152 @@ def mode_selftest():
         bn = Binance(fn, vals["binance-key"], vals["binance-secret"], lambda: clock[0])
         check(bn.positions() == raw and bn.position_path == "/fapi/v2/positionRisk", "v2 where v3 is not served")
         fn.v3 = True
-        # -- the guard's cycle -----------------------------------------------------------------------------------------
+        # -- the guard's cycle: three stages, a short's ------------------------------------------------------------------
+        creds, _p = read_credentials(etc, uid)
         notes = []
         g = Guard(creds, net=fn, now=lambda: clock[0], var=var, uid=uid, notify=notes.append)
-        fn.positions = [dict(raw[0], liquidationPrice="1700.00")]
+        key = "YFIUSDT:SHORT"
+
+        def at(*liqs, btc=None):
+            fn.positions = [dict(raw[0], liquidationPrice=str(liqs[0]))] + (
+                [dict(raw[1], markPrice=str(btc))] if btc else [])
+        at(1700.0)
         n_push, n_tg = len(fn.pushes), len(fn.tg_sent)
         g.cycle()
-        check(g.key_ok is True and g.polls_ok == 1 and len(fn.pushes) == n_push and len(fn.tg_sent) == n_tg + 1
-              and HELP[:20] in fn.tg_sent[-1]["text"], "first cycle: 6.5%% from liquidation, nothing rings; the "
-              "pending /start answered with the help")
-        base_push = len(fn.pushes)
-        for liq, want_push in (("1670.0", 0), ("1640.0", 1), ("1630.0", 0), ("1615.0", 1)):
+        check(g.key_ok is True and g.polls_ok == 1 and len(fn.pushes) == n_push and len(fn.tg_sent) == n_tg,
+              "first cycle: 6.5%% from liquidation, nothing sent; the prove's answers confirmed, not read as commands")
+        base = len(fn.pushes)
+        for liq, want, prio in ((1670.0, 1, "1"), (1640.0, 1, "2"), (1630.0, 0, None), (1615.0, 1, "2")):
             clock[0] += 5
-            fn.positions = [dict(raw[0], liquidationPrice=liq)]
+            at(liq)
             g.cycle()
-            check(len(fn.pushes) - base_push == want_push, "liq %s: pushes %d" % (liq, len(fn.pushes) - base_push))
-            base_push = len(fn.pushes)
+            check(len(fn.pushes) - base == want and (prio is None or fn.pushes[-1]["priority"] == prio),
+                  "liq %s: pushes %d" % (liq, len(fn.pushes) - base))
+            base = len(fn.pushes)
         alarm = fn.pushes[-1]
-        check(alarm["priority"] == "2" and alarm["retry"] == "30" and "ПОСЛЕДНИЙ ЗВОНОК" in alarm["title"]
-              and "долить" in alarm["message"] and "4242" not in alarm["message"], "the second alarm: %r" % alarm)
-        check(any("до ликвидации" in m["text"] for m in fn.tg_sent), "Telegram carries the warning")
-        # margin added: re-armed, then a new descent alarms again
-        clock[0] += 5
-        fn.positions = [dict(raw[0], liquidationPrice="1800.0")]
+        check(alarm["retry"] == "30" and alarm["title"].startswith("🔴 YFI SHORT · 🆘") and "Добавь" in alarm["message"]
+              and alarm["sound"] == SOUND["liq3"] and alarm["url"] == BINANCE_URL % "YFIUSDT"
+              and alarm["token"] == vals["pushover-token"] and "4242" not in alarm["message"],
+              "the last stage's call, through the main application where no short one is: %r" % alarm["title"])
+        card = fn.tg_sent[-1]
+        check(card["parse_mode"] == "HTML" and card["reply_markup"]["inline_keyboard"][1][0]["callback_data"] ==
+              "eng:" + key and g.watch[key]["card"] == fn.next_id and len(g.alarms) == 2, "the live card and two calls")
+        # -- acknowledged: he is at work; silence but the last line; margin added ------------------------------------
+        r2, r3 = list(g.alarms)
+        fn.receipts[r3].update(acknowledged=1, acknowledged_at=int(clock[0]))
+        e0 = len(fn.tg_edits)
+        clock[0] += RECEIPT_EVERY_S
         g.cycle()
-        check(g.fired.get("YFIUSDT:SHORT") == frozenset(), "re-armed after margin")
+        check(g.engaged(key) and fn.receipts[r2].get("cancelled") and not g.alarms
+              and "Ты в деле" in fn.tg_edits[-1]["text"] and len(fn.tg_edits) > e0, "acknowledged: engaged, quiet")
+        base = len(fn.pushes)
         clock[0] += 5
-        fn.positions = [dict(raw[0], liquidationPrice="1640.0")]
-        n0 = len(fn.pushes)
+        at(1610.0)
         g.cycle()
-        check(len(fn.pushes) == n0 + 1, "a new descent alarms again")
-        # commands: status, thresholds, test acknowledged; a foreign chat ignored
+        check(len(fn.pushes) == base, "under the last line, within three minutes of his work: silent")
+        clock[0] += LAST_QUIET_S
+        g.cycle()
+        clock[0] += 5
+        g.cycle()
+        check(len(fn.pushes) == base + 1 and "🆘" in fn.pushes[-1]["title"] and fn.pushes[-1]["priority"] == "2",
+              "the last line rings once")
         sent0 = len(fn.tg_sent)
-        fn.updates = [{"update_id": 20, "message": {"text": "Статус", "chat": {"id": 4242, "type": "private"}}},
-                      {"update_id": 21, "message": {"text": "Пороги 6 4 2", "chat": {"id": 4242, "type": "private"}}},
-                      {"update_id": 22, "message": {"text": "Пороги 9 8 7", "chat": {"id": 9999, "type": "private"}}},
-                      {"update_id": 23, "message": {"text": "Тест", "chat": {"id": 4242, "type": "private"}}}]
+        clock[0] += 5
+        at(1700.0)
+        g.cycle()
+        check(not g.watch and not g.alarms and "Маржа добавлена" in fn.tg_edits[-1]["text"]
+              and any("ликвидация отодвинута" in m["text"] and m["disable_notification"] for m in fn.tg_sent[sent0:]),
+              "margin added: the card closed, a quiet word, his work over")
+        # -- «Я в деле» in Telegram, a stranger's button ignored, the timeout calls again ----------------------------------
+        clock[0] += 5
+        at(1640.0)
+        g.cycle()
+        rid = list(g.alarms)[0]
+        fn.updates = [{"update_id": 30, "callback_query": {"id": "c1", "from": {"id": 4242}, "data": "eng:" + key,
+                                                           "message": {"chat": {"id": 4242}}}},
+                      {"update_id": 31, "callback_query": {"id": "c2", "from": {"id": 9999}, "data": "eng:" + key,
+                                                           "message": {"chat": {"id": 9999}}}}]
+        clock[0] += 5
+        g.cycle()
+        check(g.engaged(key) and fn.receipts[rid].get("cancelled") and len(fn.tg_answers) == 1
+              and "молчат" in fn.tg_answers[0]["text"] and g.tg_offset == 32, "«Я в деле» from his chat alone")
+        base = len(fn.pushes)
+        clock[0] += ENGAGE_S
+        g.cycle()
+        check(len(fn.pushes) == base + 1 and "⏰" in fn.pushes[-1]["title"] and fn.pushes[-1]["priority"] == "2"
+              and not g.engaged(key), "ten minutes on, the danger still there: called again")
+        clock[0] += 5
+        at(1800.0)
+        g.cycle()
+        check(not g.watch and not g.alarms, "the danger over: no watch, no open call")
+        # -- gains: a long's records and retreats through its own application; kept across a restart -----------------
+        base = len(fn.pushes)
+        for mk in (95000, 96400, 99300, 96000, 94500):
+            clock[0] += 5
+            at(1800.0, btc=mk)
+            g.cycle()
+        gp = fn.pushes[base:]
+        check([x["title"] for x in gp] == ["🟢 BTC LONG · 💰 +7,1% от входа", "🟢 BTC LONG · 💰 +10,3% от входа",
+                                           "🟢 BTC LONG · ↩️ откат: отдано 35%", "🟢 BTC LONG · ↩️ ушла половина прибыли"]
+              and all(x["token"] == vals["pushover-long"] and x["priority"] == "1" for x in gp)
+              and gp[0]["sound"] == SOUND["record"] and gp[2]["sound"] == SOUND["pullback"], "gains: %r" % [
+                  x["title"] for x in gp])
+        g.save_state()
+        mem = json.load(open(os.path.join(var, "memory.json")))
+        check(abs(mem["BTCUSDT:LONG"]["rec"] - 100 * (99300 / 90000 - 1)) < 1e-9 and mem["BTCUSDT:LONG"]["pb"] == 2,
+              "the gains' memory written")
+        g2 = Guard(creds, net=fn, now=lambda: clock[0], var=var, uid=uid, notify=notes.append)
+        g2.cycle()
+        check(len(fn.pushes) == base + 4 and g2.mem["BTCUSDT:LONG"]["pb"] == 2, "a restart tells nothing again")
+        # -- a gain while he works: held, then told quietly ----------------------------------------------------------------
+        clock[0] += 5
+        at(1640.0, btc=94500)
+        g.cycle()
+        fn.updates = [{"update_id": 40, "callback_query": {"id": "c3", "from": {"id": 4242}, "data": "eng:" + key,
+                                                           "message": {"chat": {"id": 4242}}}}]
+        clock[0] += 5
+        g.cycle()
+        base = len(fn.pushes)
+        clock[0] += 5
+        at(1640.0, btc=103400)
+        g.cycle()
+        check(g.engaged(key) and len(fn.pushes) == base and g.held == {"BTCUSDT:LONG": "record"}, "a record held")
+        sent0 = len(fn.tg_sent)
+        clock[0] += 5
+        at(1800.0, btc=103400)
+        g.cycle()
+        check(not g.held and any("Пока ты был в деле" in m["text"] and m["disable_notification"]
+                                 for m in fn.tg_sent[sent0:]), "told quietly once his work is over")
+        # -- commands: status, thresholds, target, profit, settings, a stranger, the test, a word not a command -----------
+        sent0 = len(fn.tg_sent)
+        words = ["Статус", "Пороги 6 4 2", "Цель 7", "Прибыль 0", "Настройки", "Тест", "абв"]
+        fn.updates = [{"update_id": 50 + k, "message": {"text": w, "chat": {"id": 4242, "type": "private"}}}
+                      for k, w in enumerate(words)]
+        fn.updates.insert(2, {"update_id": 49, "message": {"text": "Пороги 9 8 7", "chat": {"id": 9999,
+                                                                                         "type": "private"}}})
+        clock[0] += 5
+        g.cycle()
         clock[0] += 5
         g.cycle()
         texts = [m["text"] for m in fn.tg_sent[sent0:]]
-        check(g.th == (6.0, 4.0, 2.0) and g.tg_offset == 24 and all(m["chat_id"] == 4242 for m in fn.tg_sent),
-              "commands from the pinned chat alone: %r" % (g.th,))
-        check(any(t.startswith("Сторож: на месте") for t in texts) and any("Пороги заданы" in t for t in texts),
-              "status and thresholds answered: %r" % texts)
+        check(g.th == (6.0, 4.0, 2.0) and g.target == 7.0 and g.profit_from == 0.0 and g.tg_offset == 57
+              and all(m["chat_id"] == 4242 for m in fn.tg_sent), "commands from the pinned chat alone: %r" % (g.th,))
+        check(any(t.startswith("🛡 <b>Сторож</b>") and "✅ на посту" in t for t in texts)
+              and sum("Настройки сторожа" in t for t in texts) >= 4 and any("на кнопках" in t for t in texts),
+              "status, settings and a hint answered: %r" % [t[:30] for t in texts])
         check(g.test is not None and fn.pushes[-1]["expire"] == str(TEST_EXPIRE_S), "the test alarm sent")
-        rid = g.test["receipt"]
-        n2 = sum(1 for x in fn.pushes if x["priority"] == "2")
-        fn.receipts[rid].update(acknowledged=1, acknowledged_at=int(clock[0]))
-        fn.updates = []
+        fn.receipts[g.test["receipt"]].update(acknowledged=1, acknowledged_at=int(clock[0]))
         clock[0] += RECEIPT_EVERY_S
         g.cycle()
-        check(g.test is None and any("Тест пройден" in m["text"] for m in fn.tg_sent), "the test acknowledged")
-        check(json.load(open(os.path.join(var, "state.json")))["thresholds"] == [6.0, 4.0, 2.0], "thresholds kept")
-        check(sum(1 for x in fn.pushes if x["priority"] == "2") == n2
-              and g.fired.get("YFIUSDT:SHORT") == frozenset({1, 2}), "new thresholds ring nothing at once")
+        check(g.test is None and any("Звонок дошёл" in m["text"] for m in fn.tg_sent), "the test acknowledged")
+        st = json.load(open(os.path.join(var, "state.json")))
+        check(st["thresholds"] == [6.0, 4.0, 2.0] and st["target"] == 7.0 and st["profit_from"] == 0.0,
+              "settings kept")
+        base = len(fn.pushes)
+        clock[0] += 5
+        at(1800.0, btc=120000)
+        g.cycle()
+        check(len(fn.pushes) == base, "gains off: a record told nowhere")
         # Binance's rate refusal: no request until its back-off has passed
         real_call = fn.call
 
@@ -1717,9 +2631,9 @@ def mode_selftest():
         for _k in range(30):
             clock[0] += 5
             g.cycle()
-        check(g.blind and len(fn.pushes) == n0 + 1 and fn.pushes[-1]["priority"] == "1", "blind once")
-        check("Сторож не видит Binance" in fn.pushes[-1]["message"] and "positions" in fn.pushes[-1]["message"],
-              "the blind alarm names Binance's own error")
+        check(g.blind and len(fn.pushes) == n0 + 1 and fn.pushes[-1]["priority"] == "1"
+              and fn.pushes[-1]["title"].startswith("⚪ Сторож не видит Binance"), "blind once")
+        check("positions" in fn.pushes[-1]["message"], "the blind alarm names Binance's own error")
         del g.heartbeat
         check(any(json.loads(ln).get("where") == "heartbeat" for f in os.listdir(os.path.join(var, "journal"))
                   for ln in open(os.path.join(var, "journal", f), encoding="utf-8")), "the failing step journaled")
@@ -1739,11 +2653,11 @@ def mode_selftest():
             return real_open(path, *a, **k)
         os.open = no_room
         try:
-            fn.positions = [dict(raw[0], liquidationPrice="1800.0")]
+            at(1800.0)
             clock[0] += 5
             g.cycle()
             n0 = len(fn.pushes)
-            fn.positions = [dict(raw[0], liquidationPrice="1625.0")]
+            at(1625.0)
             clock[0] += STATE_S
             g.cycle()
         finally:
@@ -1751,10 +2665,10 @@ def mode_selftest():
         check(len(fn.pushes) == n0 + 1 and g.disk_faults > faults0, "a full disk stops no alarm")
         # Pushover down: the alarm waits in the outbox, then goes
         fn.down.add(PUSHOVER)
-        fn.positions = [dict(raw[0], liquidationPrice="1800.0")]
+        at(1800.0)
         clock[0] += 5
         g.cycle()
-        fn.positions = [dict(raw[0], liquidationPrice="1620.0")]
+        at(1620.0)
         clock[0] += 5
         g.cycle()
         check(any(m["to"] == "push" for m in g.outbox), "an alarm kept while Pushover is down")
@@ -1763,6 +2677,10 @@ def mode_selftest():
         clock[0] += 5
         g.cycle()
         check(len(fn.pushes) == n0 + 1 and not any(m["to"] == "push" for m in g.outbox), "sent once it is up")
+        at(1800.0)
+        clock[0] += 5
+        g.cycle()
+        check(not g.watch, "the danger over")
         # Telegram down: one try a pass, the alarm channel still served, the queue bounded
         fn.down.add(TG)
         tries0 = sum(1 for h, _m, _p in fn.log if h == TG)
@@ -1797,7 +2715,7 @@ def mode_selftest():
         g.next_tick = 0
         g.cycle()
         check(not os.path.exists(old), "a journal file older than %d days removed" % KEEP_DAYS)
-        hb = [m for m in fn.tg_sent if m["text"].startswith("Сторож на месте")]
+        hb = [m for m in fn.tg_sent if m["text"].startswith("🌙 <b>Сторож на посту</b>")]
         check(len(hb) == 1 and hb[0]["disable_notification"] is True, "one quiet heartbeat: %d" % len(hb))
         # a key widened at a later check: refused
         fn.perms = dict(fn.perms, enableSpotAndMarginTrading=True)
@@ -1811,11 +2729,15 @@ def mode_selftest():
         # the record: 0600 files, no secret in any of them, no chat id
         jd = os.path.join(var, "journal")
         blob = b"".join(open(os.path.join(jd, f), "rb").read() for f in os.listdir(jd))
-        blob += open(os.path.join(var, "state.json"), "rb").read() + open(os.path.join(var, "prove.json"), "rb").read()
+        blob += b"".join(open(os.path.join(var, f), "rb").read() for f in ("state.json", "prove.json", "memory.json"))
         check(all(v.encode() not in blob for v in vals.values()) and b"4242" not in blob, "no secret in the record")
-        check(all(private_file_ok(os.path.join(jd, f), uid=uid) for f in os.listdir(jd)), "journal files 0600")
+        check(all(private_file_ok(os.path.join(jd, f), uid=uid) for f in os.listdir(jd))
+              and all(private_file_ok(os.path.join(var, f), uid=uid) for f in ("state.json", "memory.json")),
+              "journal, state and memory files 0600")
         check("WATCHDOG=1" in notes, "the watchdog notified")
         check(all(h in (FAPI, SAPI, PUSHOVER, TG, HC) for h, _m, _p in fn.log), "no other host")
+        check(all(wellformed(m["text"]) for m in fn.tg_sent) and all(wellformed(m["text"]) for m in fn.tg_edits),
+              "every message sent and every edit well formed")
         clean = os.path.join(root, "clean.log")
         open(clean, "w").write("G-KEY PASS - enableReading True\nat 1795000000 from 10.0.0.2\n")
         dirty = os.path.join(root, "dirty.log")
